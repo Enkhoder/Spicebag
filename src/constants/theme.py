@@ -130,13 +130,13 @@ def getAirplaneModeText(net_state: tuple[bool, bool]) -> str:
     isAirplaneOn, isConnected = net_state
 
     if isAirplaneOn and isConnected:
-        return f"[{C_DIM}]Airplane mode: [bold {C_WARN}]ON[/]  ·  ethernet connection detected"
+        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]ON[/]  ·  ethernet connection detected"
     elif isAirplaneOn and not isConnected:
         return f"[{C_DIM}]Airplane mode: [bold {C_SUCC}]ON[/]"
     elif not isAirplaneOn and isConnected:
-        return f"[{C_DIM}]Airplane mode: [bold {C_WARN}]OFF[/]"
+        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]OFF[/]"
     else:
-        return f"[{C_DIM}]Airplane mode: [bold {C_WARN}]OFF[/]"
+        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]OFF[/]"
 
 
 def getMascotBanner(net_state: tuple[bool, bool] = (False, True)) -> Table:
@@ -176,7 +176,7 @@ C_INP = "#ECD251"
 C_IMG = "#88A4E9"
 C_WC = "#D787EF"
 C_SUCC = "#5DE073"
-C_WARN = "#FF4F5E"
+C_FAIL = "#FF4F5E"
 C_WHITE = "#FFFFFF"
 
 G_START = ((360 + 50) / 360, 0.5, 0.62)
@@ -228,7 +228,7 @@ def gradientColor(ratio: float) -> str:
     import colorsys
     ratio = max(0.0, min(1.0, ratio))
     h1, s1, v1 = colorsys.rgb_to_hsv(
-        int(C_WARN[1:3], 16) / 255, int(C_WARN[3:5], 16) / 255, int(C_WARN[5:7], 16) / 255
+        int(C_FAIL[1:3], 16) / 255, int(C_FAIL[3:5], 16) / 255, int(C_FAIL[5:7], 16) / 255
     )
     h2, s2, v2 = colorsys.rgb_to_hsv(
         int(C_SUCC[1:3], 16) / 255, int(C_SUCC[3:5], 16) / 255, int(C_SUCC[5:7], 16) / 255

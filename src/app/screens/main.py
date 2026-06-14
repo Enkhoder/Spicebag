@@ -2,7 +2,7 @@
 
 from src.constants.theme import (
     COMMANDS, WORD_COUNTS, GRID_SIZES, BANNER_META, AppState, G_START, G_END,
-    C_BG, C_SUCC, C_WARN, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
+    C_BG, C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
     blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER
 )
 import json
@@ -711,7 +711,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _emitScreenshotError(self, message: str) -> None:
-        self._newRoot(Text(message, style=f"bold {C_WARN}"), bullet=C_WARN, kind="screenshot")
+        self._newRoot(Text(message, style=f"bold {C_FAIL}"), bullet=C_FAIL, kind="screenshot")
         self._curRoot = None
         self._rebuild()
 
@@ -723,13 +723,13 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             currentStyle = "Spicebag mascot" if self._useAltBanner else "ASCII art"
             return (
                 f"[{C_DIM}]Current banner style: [{C_WHITE}]{currentStyle}[/]  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to cancel[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
             )
 
         if self._state == AppState.ENCODE_COUNT:
             return (
                 f"[{C_DIM}]Enter number of images to generate  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to cancel[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
             )
 
         if self._state == AppState.ENCODE_PHRASE:
@@ -738,22 +738,22 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 n = len(typed.split()) if typed.strip() else 0
             except Exception:
                 n = 0
-            nColor = blendHexColors(C_WHITE, C_WARN, self._wordCountFlashRatio)
+            nColor = blendHexColors(C_WHITE, C_FAIL, self._wordCountFlashRatio)
             return (
                 f"[{C_DIM}]Word [{nColor}]{n}[/] of {self._wordCount}  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to undo[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
         if self._state in (AppState.ENCODE_SALT, AppState.DECODE_SALT):
             return (
                 f"[{C_DIM}]Salt adds significant entropy to raw images  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to undo[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
         if self._state == AppState.ENCODE_CELL:
             return (
                 f"[{C_DIM}]Tip: Cell size as small as 1px can be hidden among high-res photo noises  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to undo[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
         if self._state == AppState.ENCODE_SAVE_PATH:
@@ -763,8 +763,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 (" on the main menu later for a guide to custom saves  ", C_DIM),
                 ("·", C_DIM),
                 ("  ", ""),
-                ("ESC", f"bold {C_WARN}"),
-                (" to undo", C_WARN)
+                ("ESC", f"bold {C_FAIL}"),
+                (" to undo", C_FAIL)
             )
 
         if self._state == AppState.ENCODE_CONFIRM:
@@ -772,7 +772,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             imgW = cols * self._encodeCellPx
             imgH = rows * self._encodeCellPx
             saltStr = "true" if self._encodeSalt else "false"
-            saltColor = C_SUCC if self._encodeSalt else C_WARN
+            saltColor = C_SUCC if self._encodeSalt else C_FAIL
             countLabel = "images" if self._encodeCount > 1 else "image"
 
             base = (
@@ -783,18 +783,18 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             )
             if getattr(self, "_processing", False):
                 return base
-            return base + f"  [{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to undo[/]"
+            return base + f"  [{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
 
         if self._state == AppState.DECODE_CONFIRM:
             return (
                 f"[{C_DIM}]Press ENTER to confirm and decode or ESC to step back  "
-                + f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to undo[/]"
+                + f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
         if self._state == AppState.DECODE_PATH:
             return (
                 f"[{C_DIM}]Enter the full PNG file path, e.g., C:\\Users\\...  "
-                f"[{C_DIM}]·[/]  [{C_WARN}][bold]ESC[/] to cancel[/]"
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
             )
 
         return ""
@@ -819,8 +819,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             selected = opts.index(typed) if typed in opts else -1
             suffix = Text()
             suffix.append("  ·  ", style=C_DIM)
-            suffix.append("ESC", style=f"bold {C_WARN}")
-            suffix.append(" to undo", style=C_WARN)
+            suffix.append("ESC", style=f"bold {C_FAIL}")
+            suffix.append(" to undo", style=C_FAIL)
             bar.setInteractive(opts, selected, suffix)
             return
 
@@ -999,12 +999,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._lastIdentifiedCommand = ""
 
         if self._state == AppState.BANNER_CONFIRM:
-            self._addAnswer("Operation aborted.", f"bold {C_WARN}", connStyle=C_WARN)
+            self._addAnswer("Operation aborted.", f"bold {C_FAIL}", connStyle=C_FAIL)
             self._setState(AppState.IDLE)
             return
 
         if self._state == AppState.ENCODE_COUNT:
-            self._addAnswer("Operation aborted.", f"bold {C_WARN}", connStyle=C_WARN)
+            self._addAnswer("Operation aborted.", f"bold {C_FAIL}", connStyle=C_FAIL)
             self._words = []
             self._wordCount = 0
             self._currentWordIdx = 0
@@ -1015,7 +1015,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._setState(AppState.IDLE)
 
         elif self._state == AppState.DECODE_PATH:
-            self._addAnswer("Operation aborted.", f"bold {C_WARN}", connStyle=C_WARN)
+            self._addAnswer("Operation aborted.", f"bold {C_FAIL}", connStyle=C_FAIL)
             self._decodePath = ""
             self._setState(AppState.IDLE)
 
@@ -1157,7 +1157,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         elif self._state == AppState.DECODE_PATH:
             if not value:
-                self._addNote(f"[{C_WARN}]Please enter the path to the encoded image.[/]")
+                self._addNote(f"[{C_FAIL}]Please enter the path to the encoded image.[/]")
                 return
             self._decodePath = value
             self._addDashbar(C_INP)
@@ -1240,8 +1240,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         else:
             displayCmd = cmd[:100] + "..." if len(cmd) > 100 else cmd
             if self._curRoot is not None:
-                self._curRoot.bullet = C_WARN
-            self._addStep(f"[bold {C_WARN}]Unrecognized command '{displayCmd}'.[/]", connStyle=C_WARN)
+                self._curRoot.bullet = C_FAIL
+            self._addStep(f"[bold {C_FAIL}]Unrecognized command '{displayCmd}'.[/]", connStyle=C_FAIL)
             self._curRoot = None
             self._curStep = None
             self._tabIndex = -1

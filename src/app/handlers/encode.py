@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_WARN, C_WHITE, C_IMG, AppState, OUTPUT_DIR
+from src.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_WHITE, C_IMG, AppState, OUTPUT_DIR
 from src.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic
 from src.app.handlers.savePath import parseSavePath
 from rich.style import Style
@@ -73,15 +73,15 @@ class EncodeHandlerMixin:
             try:
                 n = int(value)
             except ValueError:
-                self._addNote(f"[bold {C_WARN}]Please enter a valid number.[/]")
+                self._addNote(f"[bold {C_FAIL}]Please enter a valid number.[/]")
                 return
 
             if n <= 0:
-                self._addNote(f"[bold {C_WARN}]Image count must be at least 1.[/]")
+                self._addNote(f"[bold {C_FAIL}]Image count must be at least 1.[/]")
                 return
 
             if n > 2000:
-                self._addNote(f"[bold {C_WARN}]Image count cannot exceed 2000.[/]")
+                self._addNote(f"[bold {C_FAIL}]Image count cannot exceed 2000.[/]")
                 return
 
             self._encodeCount = n
@@ -92,7 +92,7 @@ class EncodeHandlerMixin:
 
     def _handleWordCount(self, value: str) -> None:
         if not value:
-            self._addNote(f"[bold {C_WARN}]Please enter a word count.[/]")
+            self._addNote(f"[bold {C_FAIL}]Please enter a word count.[/]")
             return
 
         self._addAnswer(value, f"bold {C_INP}")
@@ -100,11 +100,11 @@ class EncodeHandlerMixin:
         try:
             count = int(value)
         except ValueError:
-            self._addNote(f"[bold {C_WARN}]Please enter a number.[/]")
+            self._addNote(f"[bold {C_FAIL}]Please enter a number.[/]")
             return
 
         if count not in WORD_COUNTS:
-            self._addNote(f"[bold {C_WARN}]Invalid word count.[/]")
+            self._addNote(f"[bold {C_FAIL}]Invalid word count.[/]")
             return
 
         self._wordCount = count
@@ -115,7 +115,7 @@ class EncodeHandlerMixin:
 
     def _handlePhrase(self, value: str) -> None:
         if not value.strip():
-            self._addNote(f"[bold {C_WARN}]Please enter your seed phrase.[/]")
+            self._addNote(f"[bold {C_FAIL}]Please enter your seed phrase.[/]")
             return
 
         normalized = " ".join(value.split())
@@ -123,7 +123,7 @@ class EncodeHandlerMixin:
         try:
             identifySeedType(normalized, expectedLength=self._wordCount)
         except ValueError as e:
-            self._addNote(Text(str(e), style=f"bold {C_WARN}"))
+            self._addNote(Text(str(e), style=f"bold {C_FAIL}"))
             from src.app.widgets.secureInput import SecureInput
             self.query_one("#cmd-input", SecureInput).value = ""
             return
@@ -143,15 +143,15 @@ class EncodeHandlerMixin:
             try:
                 px = int(value)
             except ValueError:
-                self._addNote(f"[bold {C_WARN}]Please enter a valid integer for cell size.[/]")
+                self._addNote(f"[bold {C_FAIL}]Please enter a valid integer for cell size.[/]")
                 return
 
             if px <= 0:
-                self._addNote(f"[bold {C_WARN}]Cell size must be at least 1 pixel.[/]")
+                self._addNote(f"[bold {C_FAIL}]Cell size must be at least 1 pixel.[/]")
                 return
 
             if px > 2000:
-                self._addNote(f"[bold {C_WARN}]Cell size cannot exceed 2000px.[/]")
+                self._addNote(f"[bold {C_FAIL}]Cell size cannot exceed 2000px.[/]")
                 return
 
             self._encodeCellPx = px
@@ -167,7 +167,7 @@ class EncodeHandlerMixin:
         result = parseSavePath(rawValue, defaultDir)
 
         if isinstance(result, str):
-            self._addNote(Text(result, style=f"bold {C_WARN}"))
+            self._addNote(Text(result, style=f"bold {C_FAIL}"))
             return
 
         dirStr, stem = result
@@ -341,10 +341,10 @@ class EncodeHandlerMixin:
             try:
                 os.makedirs(target_dir, exist_ok=True)
             except PermissionError:
-                self._addNote(f"[bold {C_WARN}]Permission denied. Cannot create or access the target directory.[/]")
+                self._addNote(f"[bold {C_FAIL}]Permission denied. Cannot create or access the target directory.[/]")
                 return
             except OSError as e:
-                self._addNote(Text(f"Target directory is invalid: {e}", style=f"bold {C_WARN}"))
+                self._addNote(Text(f"Target directory is invalid: {e}", style=f"bold {C_FAIL}"))
                 return
 
             # ── Pre-flight B: writeability ────────────────────────────────────
@@ -352,10 +352,10 @@ class EncodeHandlerMixin:
                 with open(final_path, "wb"):
                     pass
             except PermissionError:
-                self._addNote(f"[bold {C_WARN}]Permission denied. Cannot write to the specified path.[/]")
+                self._addNote(f"[bold {C_FAIL}]Permission denied. Cannot write to the specified path.[/]")
                 return
             except OSError:
-                self._addNote(f"[bold {C_WARN}]Unable to write visual image to the specified path.[/]")
+                self._addNote(f"[bold {C_FAIL}]Unable to write visual image to the specified path.[/]")
                 return
             try:
                 os.remove(final_path)
@@ -410,8 +410,8 @@ class EncodeHandlerMixin:
                 inner = exc.error if isinstance(exc, WorkerFailed) else exc
                 self._addResult(
                     Text(f"Unable to write visual image — {type(inner).__name__}: {inner}",
-                         style=f"bold {C_WARN}"),
-                    C_WARN,
+                         style=f"bold {C_FAIL}"),
+                    C_FAIL,
                 )
 
         finally:
@@ -425,7 +425,7 @@ class EncodeHandlerMixin:
 
                 if self._encodingNode is not None:
                     self._encodingNode.connStyle = C_DIM
-                self._addResult(Text("Operation aborted.", style=f"bold {C_WARN}"), C_WARN)
+                self._addResult(Text("Operation aborted.", style=f"bold {C_FAIL}"), C_FAIL)
 
                 try:
                     from src.app.widgets.secureInput import SecureInput

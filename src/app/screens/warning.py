@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_WHITE, C_INP, C_WARN, C_SUCC, gradientColor
+from src.constants.theme import C_WHITE, C_INP, C_FAIL, C_SUCC, gradientColor
 from textual.containers import Vertical
 from textual.app import ComposeResult
 from textual.reactive import reactive
@@ -44,13 +44,13 @@ class WarningScreen(Screen):
             line1 = f"[{C_INP}]{line1}[/]"
 
         text = (
-            f"[bold {C_WARN}]S E C U R I T Y   W A R N I N G[/]\n\n"
-            f"[bold {C_WARN}]————————————————————————————————————————————————————————————[/]\n"
+            f"[bold {C_FAIL}]S E C U R I T Y   W A R N I N G[/]\n\n"
+            f"[bold {C_FAIL}]————————————————————————————————————————————————————————————[/]\n"
             "You are about to encode or decode a visual representation of\n"
-            f"a wallet [bold {C_WARN}]SEED PHRASE[/].\n\n"
-            f"Turning on [bold {C_WARN}]AIRPLANE MODE[/] is highly advised for heightened\n"
+            f"a wallet [bold {C_FAIL}]SEED PHRASE[/].\n\n"
+            f"Turning on [bold {C_FAIL}]AIRPLANE MODE[/] is highly advised for heightened\n"
             f"security during this session.\n\n"
-            f"Proceed [bold {C_WARN}]IF AND ONLY IF[/] all of the following are true:\n\n"
+            f"Proceed [bold {C_FAIL}]IF AND ONLY IF[/] all of the following are true:\n\n"
             f"{line1}\n"
         )
 
@@ -80,10 +80,10 @@ class WarningScreen(Screen):
 
         if self._step >= 3:
             text += (
-                f"This program provides [bold {C_WARN}]NO PROTECTION[/] against malware,\n"
+                f"This program provides [bold {C_FAIL}]NO PROTECTION[/] against malware,\n"
                 "coercion, and espionage in any form.\n\n"
-                f"[bold {C_WARN}]PROCEED AT YOUR OWN RISK.[/]\n"
-                f"[bold {C_WARN}]————————————————————————————————————————————————————————————[/]"
+                f"[bold {C_FAIL}]PROCEED AT YOUR OWN RISK.[/]\n"
+                f"[bold {C_FAIL}]————————————————————————————————————————————————————————————[/]"
             )
         else:
             text += "\n\n\n\n"
@@ -106,7 +106,7 @@ class WarningScreen(Screen):
             f"[bold {C_SUCC}]      ┌───┐[/]\n"
             f"Press "
             f"[bold {C_SUCC}]│ {key.upper()} │[/]"
-            f" to [bold {C_SUCC}]continue[/], or press any other key to [bold {C_WARN}]abort[/].\n"
+            f" to [bold {C_SUCC}]continue[/], or press any other key to [bold {C_FAIL}]abort[/].\n"
             f"[bold {C_SUCC}]      └───┘[/]"
         )
 

@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_WARN, AppState, C_SUCC, C_DIM, C_INP, C_WHITE
+from src.constants.theme import C_FAIL, AppState, C_SUCC, C_DIM, C_INP, C_WHITE
 from src.core.decoder import decodeImage
 from rich.text import Text
 from textual import work
@@ -33,15 +33,15 @@ class DecodeHandlerMixin:
         self._encodingNode = None
 
         # The decode result mirrors encode: a "Decoding seed image" step holding
-        # a C_SUCC "Decoded" child, or a C_WARN child on failure.
+        # a C_SUCC "Decoded" child, or a C_FAIL child on failure.
         self._addStep(f"[{C_WHITE}]Decoding seed image[/]")
 
         try:
             if os.path.isdir(self._decodePath):
                 self._addResult(
                     Text("The path is a directory. Please specify a PNG image file.",
-                         style=f"bold {C_WARN}"),
-                    C_WARN,
+                         style=f"bold {C_FAIL}"),
+                    C_FAIL,
                 )
                 return
 
@@ -60,24 +60,24 @@ class DecodeHandlerMixin:
                 self._addResult(decoded, C_SUCC, hints=wordLines)
 
             except ValueError as e:
-                self._addResult(Text(str(e), style=f"bold {C_WARN}"), C_WARN)
+                self._addResult(Text(str(e), style=f"bold {C_FAIL}"), C_FAIL)
             except FileNotFoundError:
                 self._addResult(
                     Text("File not found. Please verify the file path and try again.",
-                         style=f"bold {C_WARN}"),
-                    C_WARN,
+                         style=f"bold {C_FAIL}"),
+                    C_FAIL,
                 )
             except PermissionError:
                 self._addResult(
                     Text("Permission denied. Please ensure you have read access to the file.",
-                         style=f"bold {C_WARN}"),
-                    C_WARN,
+                         style=f"bold {C_FAIL}"),
+                    C_FAIL,
                 )
             except Exception:
                 self._addResult(
                     Text("Invalid image format or failed to load pixel data.",
-                         style=f"bold {C_WARN}"),
-                    C_WARN,
+                         style=f"bold {C_FAIL}"),
+                    C_FAIL,
                 )
         finally:
             self._processing = False
