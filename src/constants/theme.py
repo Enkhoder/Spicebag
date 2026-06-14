@@ -284,6 +284,7 @@ def getNetworkState() -> tuple[bool, bool, bool]:
         return (isEthernet, isWifi, isBluetooth)
 
     import subprocess
+    import plistlib
 
     def runLocal(args: list[str]) -> str:
         try:
@@ -292,9 +293,11 @@ def getNetworkState() -> tuple[bool, bool, bool]:
             return ""
 
     isBluetooth = False
-    btState = runLocal(["defaults", "read", "/Library/Preferences/com.apple.Bluetooth", "ControllerPowerState"])
-    if btState.strip() == "1":
-        isBluetooth = True
+    try:
+        with open("/Library/Preferences/com.apple.Bluetooth.plist", "rb") as f:
+            isBluetooth = plistlib.load(f).get("ControllerPowerState") == 1
+    except Exception:
+        isBluetooth = False
 
     hardwarePorts = runLocal(["networksetup", "-listallhardwareports"]).splitlines()
     wifiDevice = ""
