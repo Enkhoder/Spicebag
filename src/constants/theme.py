@@ -337,11 +337,12 @@ def getNetworkText(net_state: tuple[bool, bool, bool]) -> str:
     if isBluetooth:
         indicators.append("Bluetooth")
 
-    text = f"[{C_WHITE}]Network status: [/][bold {C_FAIL}]Online[/]"
-    for indicator in indicators:
-        text += f"[{C_DIM}], {indicator}[/]"
+    indicatorStr = ", ".join(indicators)
 
-    return text
+    return (
+        f"[{C_WHITE}]Network status: [/][bold {C_FAIL}]Online[/]"
+        + f"[{C_DIM}]  ·  {indicatorStr}[/]"
+    )
 
 
 def getMascotBanner(net_state: tuple[bool, bool, bool] = (False, False, False)) -> Table:
