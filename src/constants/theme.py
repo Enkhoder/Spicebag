@@ -96,61 +96,149 @@ MASCOT_COLORS = [
 ]
 
 
-def getNetworkState() -> tuple[bool, bool]:
+def _winAdapterState() -> tuple[bool, bool]:
+    import ctypes
+    from ctypes import wintypes
+
+    AF_UNSPEC = 0
+    IF_TYPE_ETHERNET = 6
+    IF_TYPE_WIFI = 71
+    OPER_STATUS_UP = 1
+
+    class IP_ADAPTER_ADDRESSES(ctypes.Structure):
+        pass
+
+    IP_ADAPTER_ADDRESSES._fields_ = [
+        ("Length", wintypes.ULONG),
+        ("IfIndex", wintypes.DWORD),
+        ("Next", ctypes.POINTER(IP_ADAPTER_ADDRESSES)),
+        ("AdapterName", ctypes.c_char_p),
+        ("FirstUnicastAddress", ctypes.c_void_p),
+        ("FirstAnycastAddress", ctypes.c_void_p),
+        ("FirstMulticastAddress", ctypes.c_void_p),
+        ("FirstDnsServerAddress", ctypes.c_void_p),
+        ("DnsSuffix", wintypes.LPWSTR),
+        ("Description", wintypes.LPWSTR),
+        ("FriendlyName", wintypes.LPWSTR),
+        ("PhysicalAddress", ctypes.c_ubyte * 8),
+        ("PhysicalAddressLength", wintypes.DWORD),
+        ("Flags", wintypes.DWORD),
+        ("Mtu", wintypes.DWORD),
+        ("IfType", wintypes.DWORD),
+        ("OperStatus", wintypes.DWORD)
+    ]
+
+    getAdapters = ctypes.windll.Iphlpapi.GetAdaptersAddresses
+    size = wintypes.ULONG(0)
+    getAdapters(AF_UNSPEC, 0, None, None, ctypes.byref(size))
+
+    buf = ctypes.create_string_buffer(size.value)
+    head = ctypes.cast(buf, ctypes.POINTER(IP_ADAPTER_ADDRESSES))
+    ret = getAdapters(AF_UNSPEC, 0, None, head, ctypes.byref(size))
+
+    isEthernet = False
+    isWifi = False
+
+    if ret == 0:
+        cur = head
+        while cur:
+            node = cur.contents
+            if node.OperStatus == OPER_STATUS_UP:
+                if node.IfType == IF_TYPE_ETHERNET:
+                    isEthernet = True
+                elif node.IfType == IF_TYPE_WIFI:
+                    isWifi = True
+            cur = node.Next
+
+    return (isEthernet, isWifi)
+
+
+def _winBluetoothState() -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    class BLUETOOTH_FIND_RADIO_PARAMS(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD)]
+
+    try:
+        bth = ctypes.windll.LoadLibrary("Bthprops.cpl")
+    except OSError:
+        return False
+
+    bth.BluetoothFindFirstRadio.restype = wintypes.HANDLE
+    bth.BluetoothFindFirstRadio.argtypes = [
+        ctypes.POINTER(BLUETOOTH_FIND_RADIO_PARAMS), ctypes.POINTER(wintypes.HANDLE)
+    ]
+    bth.BluetoothFindRadioClose.argtypes = [wintypes.HANDLE]
+
+    params = BLUETOOTH_FIND_RADIO_PARAMS(ctypes.sizeof(BLUETOOTH_FIND_RADIO_PARAMS))
+    radio = wintypes.HANDLE()
+    hFind = bth.BluetoothFindFirstRadio(ctypes.byref(params), ctypes.byref(radio))
+
+    if hFind:
+        ctypes.windll.kernel32.CloseHandle(radio)
+        bth.BluetoothFindRadioClose(hFind)
+        return True
+
+    return False
+
+
+def getNetworkState() -> tuple[bool, bool, bool]:
     import sys
+
     if sys.platform == "win32":
-        import ctypes
-        import winreg
-        flags = ctypes.c_int(0)
-        res = ctypes.windll.wininet.InternetGetConnectedState(ctypes.byref(flags), 0)
-        isConnected = (res == 1)
+        isEthernet, isWifi = _winAdapterState()
+        isBluetooth = _winBluetoothState()
 
-        isAirplaneOn = False
-        try:
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"System\CurrentControlSet\Control\RadioManagement\SystemRadioState")
-            val, _ = winreg.QueryValueEx(key, "")
-            winreg.CloseKey(key)
-            isAirplaneOn = (val == 1)
-        except Exception:
-            pass
-
-        return (isAirplaneOn, isConnected)
+        return (isEthernet, isWifi, isBluetooth)
 
     if sys.platform == "linux":
         import os
 
-        rfkillBase = "/sys/class/rfkill"
-        isAirplaneOn = False
-        try:
-            radios = os.listdir(rfkillBase) if os.path.isdir(rfkillBase) else []
-            if radios:
-                anyRadioOn = False
-                for entry in radios:
-                    with open(os.path.join(rfkillBase, entry, "state")) as f:
-                        if f.read().strip() == "1":
-                            anyRadioOn = True
-                            break
-                isAirplaneOn = not anyRadioOn
-        except Exception:
-            isAirplaneOn = False
-
         netBase = "/sys/class/net"
-        isEthernetConnected = False
+        isEthernet = False
+        isWifi = False
         try:
             for iface in os.listdir(netBase):
-                if iface == "lo" or os.path.isdir(os.path.join(netBase, iface, "wireless")):
+                if iface == "lo":
                     continue
+                ifacePath = os.path.join(netBase, iface)
+                isWireless = os.path.isdir(os.path.join(ifacePath, "wireless"))
                 try:
-                    with open(os.path.join(netBase, iface, "carrier")) as f:
+                    with open(os.path.join(ifacePath, "operstate")) as f:
+                        isUp = f.read().strip() == "up"
+                except OSError:
+                    isUp = False
+
+                if not isUp:
+                    continue
+                if isWireless:
+                    isWifi = True
+                else:
+                    isEthernet = True
+        except Exception:
+            pass
+
+        isBluetooth = False
+        rfkillBase = "/sys/class/rfkill"
+        try:
+            radios = os.listdir(rfkillBase) if os.path.isdir(rfkillBase) else []
+            for entry in radios:
+                entryPath = os.path.join(rfkillBase, entry)
+                try:
+                    with open(os.path.join(entryPath, "type")) as f:
+                        if f.read().strip() != "bluetooth":
+                            continue
+                    with open(os.path.join(entryPath, "state")) as f:
                         if f.read().strip() == "1":
-                            isEthernetConnected = True
+                            isBluetooth = True
                             break
                 except OSError:
                     continue
         except Exception:
             pass
 
-        return (isAirplaneOn, isEthernetConnected)
+        return (isEthernet, isWifi, isBluetooth)
 
     import subprocess
 
@@ -160,44 +248,61 @@ def getNetworkState() -> tuple[bool, bool]:
         except Exception:
             return ""
 
-    anyRadioActive = False
-
+    isBluetooth = False
     btState = runLocal(["defaults", "read", "/Library/Preferences/com.apple.Bluetooth", "ControllerPowerState"])
     if btState.strip() == "1":
-        anyRadioActive = True
+        isBluetooth = True
 
-    if not anyRadioActive:
-        hardwarePorts = runLocal(["networksetup", "-listallhardwareports"]).splitlines()
-        wifiDevice = ""
-        for i, line in enumerate(hardwarePorts):
-            if "Wi-Fi" in line or "AirPort" in line:
-                for j in range(i + 1, min(i + 4, len(hardwarePorts))):
-                    if "Device:" in hardwarePorts[j]:
-                        wifiDevice = hardwarePorts[j].split("Device:")[1].strip()
-                        break
-                break
+    hardwarePorts = runLocal(["networksetup", "-listallhardwareports"]).splitlines()
+    wifiDevice = ""
+    for i, line in enumerate(hardwarePorts):
+        if "Wi-Fi" in line or "AirPort" in line:
+            for j in range(i + 1, min(i + 4, len(hardwarePorts))):
+                if "Device:" in hardwarePorts[j]:
+                    wifiDevice = hardwarePorts[j].split("Device:")[1].strip()
+                    break
+            break
 
-        if wifiDevice and ": On" in runLocal(["networksetup", "-getairportpower", wifiDevice]):
-            anyRadioActive = True
+    isWifi = False
+    if len(wifiDevice) > 0 and ": On" in runLocal(["networksetup", "-getairportpower", wifiDevice]):
+        isWifi = True
 
-    if not anyRadioActive and "status: active" in runLocal(["ifconfig"]):
-        anyRadioActive = True
+    isEthernet = False
+    currentIface = ""
+    for line in runLocal(["ifconfig"]).splitlines():
+        if line and not line[0].isspace():
+            currentIface = line.split(":")[0]
+        elif "status: active" in line and currentIface and currentIface != wifiDevice:
+            if not currentIface.startswith("lo"):
+                isEthernet = True
 
-    return (not anyRadioActive, False)
+    return (isEthernet, isWifi, isBluetooth)
 
 
-def getConnectivityText(isOnline: bool) -> str:
-    if isOnline:
-        return f"[{C_DIM}]Connectivity: [bold {C_FAIL}]Online[/]"
+def getNetworkText(net_state: tuple[bool, bool, bool]) -> str:
+    isEthernet, isWifi, isBluetooth = net_state
+    isOnline = isEthernet or isWifi or isBluetooth
 
-    return f"[{C_DIM}]Connectivity: [bold {C_SUCC}]Offline[/]"
+    if not isOnline:
+        return f"[{C_WHITE}]Network status: [/][bold {C_SUCC}]Offline[/]"
+
+    indicators = []
+    if isEthernet:
+        indicators.append("Ethernet")
+    elif isWifi:
+        indicators.append("Wi-Fi")
+    if isBluetooth:
+        indicators.append("Bluetooth")
+
+    text = f"[{C_WHITE}]Network status: [/][bold {C_FAIL}]Online[/]"
+    for indicator in indicators:
+        text += f"[{C_DIM}]  ·  {indicator}[/]"
+
+    return text
 
 
-def getMascotBanner(net_state: tuple[bool, bool] = (False, True)) -> Table:
+def getMascotBanner(net_state: tuple[bool, bool, bool] = (False, False, False)) -> Table:
     from rich.text import Text
-
-    isAirplaneOn, isEthernetConnected = net_state
-    isOnline = (not isAirplaneOn) or isEthernetConnected
 
     table = Table.grid(padding=(0, 3))
     table.add_column(width=12, no_wrap=True)
@@ -221,7 +326,7 @@ def getMascotBanner(net_state: tuple[bool, bool] = (False, True)) -> Table:
         "\n"
         f"[bold]{getGradientString('Spicebag')}[/] [{C_DIM}][italic]v{getVersion()}[/][/]\n"
         f"[{C_WHITE}]Visual Mnemonic Encoder / Decoder[/]\n"
-        f"{getConnectivityText(isOnline)}"
+        f"{getNetworkText(net_state)}"
     )
 
     table.add_row(Text.from_markup(mascot), Text.from_markup(right))

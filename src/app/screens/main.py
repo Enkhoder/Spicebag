@@ -465,10 +465,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     # ─────────────────────────────── WELCOME ────────────────────────────────
 
     def _showWelcome(self) -> None:
-        from src.constants.theme import getConnectivityText
-
-        isAirplaneOn, isEthernetConnected = self._airplaneMode
-        isOnline = (not isAirplaneOn) or isEthernetConnected
+        from src.constants.theme import getNetworkText
 
         if self._useAltBanner:
             self._welcome = [getMascotBanner(self._airplaneMode)]
@@ -476,7 +473,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._welcome = [
                 self._getGradientBanner(),
                 "  " + BANNER_META,
-                "  " + getConnectivityText(isOnline),
+                "  " + getNetworkText(self._airplaneMode),
             ]
 
 
@@ -511,22 +508,19 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                     pass
 
 
-    def _updateAirplaneMode(self, net_state: tuple[bool, bool]) -> None:
+    def _updateAirplaneMode(self, net_state: tuple[bool, bool, bool]) -> None:
         if getattr(self, "_airplaneMode", None) != net_state:
             self._airplaneMode = net_state
 
             if not self._welcome:
                 return
 
-            from src.constants.theme import getConnectivityText
-
-            isAirplaneOn, isEthernetConnected = net_state
-            isOnline = (not isAirplaneOn) or isEthernetConnected
+            from src.constants.theme import getNetworkText
 
             if self._useAltBanner:
                 self._welcome[0] = getMascotBanner(net_state)
             elif len(self._welcome) > 2:
-                self._welcome[2] = "  " + getConnectivityText(isOnline)
+                self._welcome[2] = "  " + getNetworkText(net_state)
 
             self._rebuild(scrollToEnd=False)
 
