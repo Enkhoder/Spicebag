@@ -103,7 +103,8 @@ def _winAdapterState() -> tuple[bool, bool]:
     AF_UNSPEC = 0
     IF_TYPE_ETHERNET = 6
     IF_TYPE_WIFI = 71
-    OPER_STATUS_UP = 1
+    MEDIA_CONNECTED = 1
+    CONNECTOR_PRESENT = 0x04
 
     class IP_ADAPTER_ADDRESSES(ctypes.Structure):
         pass
@@ -128,6 +129,49 @@ def _winAdapterState() -> tuple[bool, bool]:
         ("OperStatus", wintypes.DWORD)
     ]
 
+    # Trailing _tail over-allocates past MediaConnectState so GetIfEntry2 (which
+    # writes the full MIB_IF_ROW2) never runs off the end of our buffer.
+    class MIB_IF_ROW2(ctypes.Structure):
+        _fields_ = [
+            ("InterfaceLuid", ctypes.c_ulonglong),
+            ("InterfaceIndex", wintypes.DWORD),
+            ("InterfaceGuid", ctypes.c_byte * 16),
+            ("Alias", ctypes.c_wchar * 257),
+            ("Description", ctypes.c_wchar * 257),
+            ("PhysicalAddressLength", wintypes.ULONG),
+            ("PhysicalAddress", ctypes.c_ubyte * 32),
+            ("PermanentPhysicalAddress", ctypes.c_ubyte * 32),
+            ("Mtu", wintypes.ULONG),
+            ("Type", wintypes.ULONG),
+            ("TunnelType", ctypes.c_int),
+            ("MediaType", ctypes.c_int),
+            ("PhysicalMediumType", ctypes.c_int),
+            ("AccessType", ctypes.c_int),
+            ("DirectionType", ctypes.c_int),
+            ("InterfaceAndOperStatusFlags", ctypes.c_ubyte),
+            ("OperStatus", ctypes.c_int),
+            ("AdminStatus", ctypes.c_int),
+            ("MediaConnectState", ctypes.c_int),
+            ("_tail", ctypes.c_ubyte * 512)
+        ]
+
+    getIfEntry2 = ctypes.windll.Iphlpapi.GetIfEntry2
+
+    # A live physical link only — a present cable/radio connector (excludes
+    # virtual adapters: Hyper-V, WSL, VMware …) with media actually connected.
+    # Wi-Fi NICs report no cable connector, so they are gated on media alone.
+    def physicalLink(ifIndex: int, requireConnector: bool) -> bool:
+        row = MIB_IF_ROW2()
+        row.InterfaceIndex = ifIndex
+        if getIfEntry2(ctypes.byref(row)) != 0:
+            return False
+
+        if row.MediaConnectState != MEDIA_CONNECTED:
+            return False
+
+        connectorPresent = bool(row.InterfaceAndOperStatusFlags & CONNECTOR_PRESENT)
+        return connectorPresent or not requireConnector
+
     getAdapters = ctypes.windll.Iphlpapi.GetAdaptersAddresses
     size = wintypes.ULONG(0)
     getAdapters(AF_UNSPEC, 0, None, None, ctypes.byref(size))
@@ -143,11 +187,10 @@ def _winAdapterState() -> tuple[bool, bool]:
         cur = head
         while cur:
             node = cur.contents
-            if node.OperStatus == OPER_STATUS_UP:
-                if node.IfType == IF_TYPE_ETHERNET:
-                    isEthernet = True
-                elif node.IfType == IF_TYPE_WIFI:
-                    isWifi = True
+            if node.IfType == IF_TYPE_ETHERNET and physicalLink(node.IfIndex, True):
+                isEthernet = True
+            elif node.IfType == IF_TYPE_WIFI and physicalLink(node.IfIndex, False):
+                isWifi = True
             cur = node.Next
 
     return (isEthernet, isWifi)
@@ -296,7 +339,7 @@ def getNetworkText(net_state: tuple[bool, bool, bool]) -> str:
 
     text = f"[{C_WHITE}]Network status: [/][bold {C_FAIL}]Online[/]"
     for indicator in indicators:
-        text += f"[{C_DIM}]  ·  {indicator}[/]"
+        text += f"[{C_DIM}], {indicator}[/]"
 
     return text
 
