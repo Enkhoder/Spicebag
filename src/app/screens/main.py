@@ -464,7 +464,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     # ─────────────────────────────── WELCOME ────────────────────────────────
 
     def _showWelcome(self) -> None:
-        from src.constants.theme import getAirplaneModeText
+        from src.constants.theme import getConnectivityText
+
+        isAirplaneOn, isEthernetConnected = self._airplaneMode
+        isOnline = (not isAirplaneOn) or isEthernetConnected
 
         if self._useAltBanner:
             self._welcome = [getMascotBanner(self._airplaneMode)]
@@ -472,28 +475,39 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._welcome = [
                 self._getGradientBanner(),
                 "  " + BANNER_META,
-                "  " + getAirplaneModeText(self._airplaneMode),
+                "  " + getConnectivityText(isOnline),
             ]
 
 
     def _pollAirplaneMode(self) -> None:
         from src.constants.theme import getNetworkState
-        import ctypes
-        from ctypes import wintypes
+        import sys
 
         net_state = getNetworkState()
         self.app.call_from_thread(self._updateAirplaneMode, net_state)
 
-        Iphlpapi = ctypes.windll.Iphlpapi
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
 
-        while True:
-            handle = wintypes.HANDLE()
-            Iphlpapi.NotifyAddrChange(ctypes.byref(handle), None)
-            net_state = getNetworkState()
-            try:
-                self.app.call_from_thread(self._updateAirplaneMode, net_state)
-            except Exception:
-                pass
+            Iphlpapi = ctypes.windll.Iphlpapi
+
+            while True:
+                handle = wintypes.HANDLE()
+                Iphlpapi.NotifyAddrChange(ctypes.byref(handle), None)
+                net_state = getNetworkState()
+                try:
+                    self.app.call_from_thread(self._updateAirplaneMode, net_state)
+                except Exception:
+                    pass
+        else:
+            while True:
+                time.sleep(2)
+                net_state = getNetworkState()
+                try:
+                    self.app.call_from_thread(self._updateAirplaneMode, net_state)
+                except Exception:
+                    pass
 
 
     def _updateAirplaneMode(self, net_state: tuple[bool, bool]) -> None:
@@ -503,12 +517,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if not self._welcome:
                 return
 
-            from src.constants.theme import getAirplaneModeText
+            from src.constants.theme import getConnectivityText
+
+            isAirplaneOn, isEthernetConnected = net_state
+            isOnline = (not isAirplaneOn) or isEthernetConnected
 
             if self._useAltBanner:
                 self._welcome[0] = getMascotBanner(net_state)
             elif len(self._welcome) > 2:
-                self._welcome[2] = "  " + getAirplaneModeText(net_state)
+                self._welcome[2] = "  " + getConnectivityText(isOnline)
 
             self._rebuild(scrollToEnd=False)
 

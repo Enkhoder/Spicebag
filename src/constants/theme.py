@@ -115,32 +115,89 @@ def getNetworkState() -> tuple[bool, bool]:
             pass
 
         return (isAirplaneOn, isConnected)
-    
-    import socket
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1.0)
-            s.connect(("8.8.8.8", 53))
-        return (False, True)
-    except OSError:
-        return (True, False)
+
+    if sys.platform == "linux":
+        import os
+
+        rfkillBase = "/sys/class/rfkill"
+        isAirplaneOn = False
+        try:
+            radios = os.listdir(rfkillBase) if os.path.isdir(rfkillBase) else []
+            if radios:
+                anyRadioOn = False
+                for entry in radios:
+                    with open(os.path.join(rfkillBase, entry, "state")) as f:
+                        if f.read().strip() == "1":
+                            anyRadioOn = True
+                            break
+                isAirplaneOn = not anyRadioOn
+        except Exception:
+            isAirplaneOn = False
+
+        netBase = "/sys/class/net"
+        isEthernetConnected = False
+        try:
+            for iface in os.listdir(netBase):
+                if iface == "lo" or os.path.isdir(os.path.join(netBase, iface, "wireless")):
+                    continue
+                try:
+                    with open(os.path.join(netBase, iface, "carrier")) as f:
+                        if f.read().strip() == "1":
+                            isEthernetConnected = True
+                            break
+                except OSError:
+                    continue
+        except Exception:
+            pass
+
+        return (isAirplaneOn, isEthernetConnected)
+
+    import subprocess
+
+    def runLocal(args: list[str]) -> str:
+        try:
+            return subprocess.run(args, capture_output=True, text=True, timeout=2).stdout
+        except Exception:
+            return ""
+
+    anyRadioActive = False
+
+    btState = runLocal(["defaults", "read", "/Library/Preferences/com.apple.Bluetooth", "ControllerPowerState"])
+    if btState.strip() == "1":
+        anyRadioActive = True
+
+    if not anyRadioActive:
+        hardwarePorts = runLocal(["networksetup", "-listallhardwareports"]).splitlines()
+        wifiDevice = ""
+        for i, line in enumerate(hardwarePorts):
+            if "Wi-Fi" in line or "AirPort" in line:
+                for j in range(i + 1, min(i + 4, len(hardwarePorts))):
+                    if "Device:" in hardwarePorts[j]:
+                        wifiDevice = hardwarePorts[j].split("Device:")[1].strip()
+                        break
+                break
+
+        if wifiDevice and ": On" in runLocal(["networksetup", "-getairportpower", wifiDevice]):
+            anyRadioActive = True
+
+    if not anyRadioActive and "status: active" in runLocal(["ifconfig"]):
+        anyRadioActive = True
+
+    return (not anyRadioActive, False)
 
 
-def getAirplaneModeText(net_state: tuple[bool, bool]) -> str:
-    isAirplaneOn, isConnected = net_state
+def getConnectivityText(isOnline: bool) -> str:
+    if isOnline:
+        return f"[{C_DIM}]Connectivity: [bold {C_FAIL}]Online[/]"
 
-    if isAirplaneOn and isConnected:
-        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]ON[/]  ·  ethernet connection detected"
-    elif isAirplaneOn and not isConnected:
-        return f"[{C_DIM}]Airplane mode: [bold {C_SUCC}]ON[/]"
-    elif not isAirplaneOn and isConnected:
-        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]OFF[/]"
-    else:
-        return f"[{C_DIM}]Airplane mode: [bold {C_FAIL}]OFF[/]"
+    return f"[{C_DIM}]Connectivity: [bold {C_SUCC}]Offline[/]"
 
 
 def getMascotBanner(net_state: tuple[bool, bool] = (False, True)) -> Table:
     from rich.text import Text
+
+    isAirplaneOn, isEthernetConnected = net_state
+    isOnline = (not isAirplaneOn) or isEthernetConnected
 
     table = Table.grid(padding=(0, 3))
     table.add_column(width=12, no_wrap=True)
@@ -164,7 +221,7 @@ def getMascotBanner(net_state: tuple[bool, bool] = (False, True)) -> Table:
         "\n"
         f"[bold]{getGradientString('Spicebag')}[/] [{C_DIM}][italic]v{getVersion()}[/][/]\n"
         f"[{C_WHITE}]Visual Mnemonic Encoder / Decoder[/]\n"
-        f"{getAirplaneModeText(net_state)}"
+        f"{getConnectivityText(isOnline)}"
     )
 
     table.add_row(Text.from_markup(mascot), Text.from_markup(right))
