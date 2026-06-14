@@ -449,10 +449,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._rebuild(scrollToEnd=False)
 
 
-    def _maskActiveSample(self) -> None:
+    def _maskActiveSample(self, dropColorSpace: bool = True) -> None:
         node = self._activeSampleNode
         self._activeSampleNode = None
-        self._colorSpace = None
+        if dropColorSpace:
+            self._colorSpace = None
         self._sampleStartLine = -1
 
         if node is not None:
@@ -1054,11 +1055,18 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
             self._addAnswer("User stepped back.", C_DIM)
 
-            if self._state in (AppState.ENCODE_CELL, AppState.ENCODE_SAVE_PATH, AppState.ENCODE_CONFIRM):
+            # Re-entering salt input (stepping out of ENCODE_CELL → ENCODE_SALT)
+            # is the only step-back that invalidates the cached colour space.
+            # Bouncing between ENCODE_CONFIRM and ENCODE_SAVE_PATH keeps it so the
+            # returning sample is byte-identical to the one shown before ESC.
+            if self._state == AppState.ENCODE_CELL:
                 self._cancelPrecompute()
+            elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.ENCODE_CONFIRM):
+                self._stopConfirmSpinner()
+                self._confirmStepNode = None
 
             if self._state == AppState.ENCODE_CONFIRM:
-                self._maskActiveSample()
+                self._maskActiveSample(dropColorSpace=False)
 
             if self._state == AppState.ENCODE_WORD_COUNT:
                 self._encodeCount = 1
