@@ -1,0 +1,38 @@
+{
+  "name": "spicebag",
+  "version": "1.0.0",
+  "description": "**Visual Mnemonic Encoder / Decoder** by [0xE14118](https://github.com/0xE14118)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:css": "tailwindcss -i ./static/input.css -o ./static/tailwind.css",
+    "dev:css": "tailwindcss -i ./static/input.css -o ./static/tailwind.css --watch",
+    "dev:react": "vite build --watch",
+    "build:react": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://0xE14118@github.com/0xE14118/Spicebag.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/0xE14118/Spicebag/issues"
+  },
+  "homepage": "https://github.com/0xE14118/Spicebag#readme",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  }
+}

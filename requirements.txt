@@ -1,0 +1,8 @@
+typer
+rich
+textual
+pillow
+mnemonic
+shamir-mnemonic
+argon2-cffi
+setuptools

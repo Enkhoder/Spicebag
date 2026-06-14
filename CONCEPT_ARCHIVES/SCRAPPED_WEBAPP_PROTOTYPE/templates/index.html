@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/tailwind.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="scrolling-bg-container" id="bgContainer"></div>
+
+    <nav class="navbar">
+        <div class="nav-logo">Spicebag</div>
+        <div class="nav-links">
+            <a href="#" class="nav-btn active" data-target="encode-tab">Encode</a>
+            <a href="#" class="nav-btn" data-target="decode-tab">Decode</a>
+        </div>
+    </nav>
+
+    <div class="warning-banner" id="warningBanner">
+        <strong>SECURITY WARNING:</strong> Proceed IF AND ONLY IF you are in a private, isolated location, no one else
+        can see your screen, and no recording devices are present.
+        <div>
+            <button id="understandBtn" class="btn-understand" disabled>I UNDERSTAND (3s)</button>
+        </div>
+    </div>
+
+    <main class="page-container">
+
+        <!-- ENCODE TAB -->
+        <section id="encode-tab" class="tab-content active">
+            <div class="card bg-yellow">
+                <div class="card-header">
+                    <h2>Generate Image from Seed Phrase</h2>
+                </div>
+                <div class="card-body">
+                    <form id="encodeForm" class="brutalist-form">
+                        <div class="form-group" style="position: relative;">
+                            <div class="seed-header-row">
+                                <label>Seed Phrase (12, 15, 18, 20, 21, 24, or 33 words)</label>
+                                <button type="button" class="btn-toggle-vis" id="toggleMnemonic" tabindex="-1">
+                                    <span class="timer-overlay" style="--duration: 3s">
+                                        <svg class="timer-svg" viewBox="0 0 36 36">
+                                            <circle cx="18" cy="18" r="18" />
+                                        </svg>
+                                    </span>
+                                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path
+                                            d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                        <path
+                                            d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                        <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="seed-grid" id="seedGrid">
+                                <!-- Dynamically generated word boxes go here -->
+                            </div>
+                            <input type="hidden" name="mnemonic" id="mnemonicHidden">
+                            <div class="seed-error-container" id="seedErrorContainer"></div>
+                        </div>
+
+                        <div class="form-group row">
+                            <div class="col">
+                                <label for="salt">Salt (Highly recommended)</label>
+                                <div class="input-wrapper" style="position: relative;">
+                                    <button type="button" class="btn-toggle-vis" id="toggleSalt" tabindex="-1">
+                                        <span class="timer-overlay" style="--duration: 3s">
+                                            <svg class="timer-svg" viewBox="0 0 36 36">
+                                                <circle cx="18" cy="18" r="18" />
+                                            </svg>
+                                        </span>
+                                        <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                        <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path
+                                                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                            <path
+                                                d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                            <line x1="1" y1="1" x2="23" y2="23" />
+                                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                                        </svg>
+                                    </button>
+                                    <input type="password" id="salt" name="salt" placeholder="Leave blank for none"
+                                        class="masked-input">
+                                </div>
+                            </div>
+                            <div class="col">
+                                <label for="cellPx">Cell Size (px)</label>
+                                <div class="input-wrapper" style="position: relative;">
+                                    <input type="number" id="cellPx" name="cellPx" value="100" min="1" required>
+                                    <div class="num-controls">
+                                        <button type="button" class="btn-num up-btn" data-target="cellPx"><svg
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="18 15 12 9 6 15"></polyline>
+                                            </svg></button>
+                                        <button type="button" class="btn-num down-btn" data-target="cellPx"><svg
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="6 9 12 15 18 9"></polyline>
+                                            </svg></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group checkbox-container" id="bulkToggleContainer">
+                            <label class="checkbox-label" style="display: flex; align-items: center; gap: 1rem;">
+                                <input type="checkbox" id="bulkToggle">
+                                Enable bulk generation (zip)
+                            </label>
+                        </div>
+
+                        <div class="form-group bulk-count-group" id="bulkCountGroup">
+                            <label for="count">Image Count</label>
+                            <div class="input-wrapper" style="position: relative;">
+                                <input type="number" id="count" name="count" value="5" min="1">
+                                <div class="num-controls">
+                                    <button type="button" class="btn-num up-btn" data-target="count"><svg
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="18 15 12 9 6 15"></polyline>
+                                        </svg></button>
+                                    <button type="button" class="btn-num down-btn" data-target="count"><svg
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="encodeSubmitBtn">Generate Image</button>
+                    </form>
+                    <div id="encodeResult" class="result-message hidden"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DECODE TAB -->
+        <section id="decode-tab" class="tab-content hidden">
+            <div class="card bg-pink">
+                <div class="card-header">
+                    <h2>Decode Seed Phrase from Image</h2>
+                </div>
+                <div class="card-body">
+                    <form id="decodeForm" class="brutalist-form">
+                        <div class="form-group">
+                            <label>Upload PNG Image</label>
+                            <div class="image-upload-wrapper">
+                                <input type="file" id="imageUpload" name="image" accept="image/png" required
+                                    class="hidden-file-input">
+                                <label for="imageUpload" id="imagePreviewContainer" class="image-preview-box">
+                                    <span id="imageUploadPlaceholder">Click to choose image or drag & drop</span>
+                                    <img id="imagePreview" src="" alt="Selected image" style="display: none;">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="decodeSalt">Salt (Leave blank if none was used)</label>
+                            <div class="input-wrapper" style="position: relative;">
+                                <button type="button" class="btn-toggle-vis" id="toggleDecodeSalt" tabindex="-1">
+                                    <span class="timer-overlay" style="--duration: 3s">
+                                        <svg class="timer-svg" viewBox="0 0 36 36">
+                                            <circle cx="18" cy="18" r="18" />
+                                        </svg>
+                                    </span>
+                                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path
+                                            d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                        <path
+                                            d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                        <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                                    </svg>
+                                </button>
+                                <input type="password" id="decodeSalt" name="salt" placeholder="Leave blank for none"
+                                    class="masked-input">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary" id="decodeSubmitBtn">Decode Image</button>
+                    </form>
+
+                    <div id="decodeResult" class="result-message hidden">
+                        <div class="decoded-title">DECODED SEED PHRASE:</div>
+                        <div class="decoded-mnemonic" id="decodedText"></div>
+                        <button class="btn btn-copy" id="copyBtn">Copy to Clipboard</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

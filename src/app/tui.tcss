@@ -1,0 +1,175 @@
+/******* GLOBAL *******/
+
+App {
+    background: ansi_default;
+}
+
+Screen {
+    background: ansi_default;
+    color: #FFFFFF;
+    padding: 0;
+    margin: 0;
+    overflow: hidden hidden;
+}
+
+
+/******* WARNING SCREEN *******/
+
+#warning-container {
+    height: 100%;
+    width: 100%;
+    align: center middle;
+    content-align: center middle;
+}
+
+#warning-text {
+    width: 60;
+    text-align: left;
+    color: #EF876C;
+}
+
+#warning-prompt {
+    width: 60;
+    text-align: left;
+}
+
+#warning-bar {
+    width: 60;
+    text-align: left;
+    margin-top: 1;
+}
+
+
+/******* APP CONTAINER *******/
+
+#app-container {
+    height: 100%;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+
+/******* SEPARATOR *******/
+
+Rule {
+    color: $bg;
+    margin: 0;
+    padding: 0;
+    transition: color 100ms in_out_cubic;
+}
+
+Rule.input-error {
+    color: #35181A;
+}
+
+
+/******* TERMINAL LOG *******/
+
+#terminal-log {
+    height: 1fr;
+    background: transparent;
+    color: #FFFFFF;
+    border: none;
+    padding: 0;
+    margin: 0;
+    scrollbar-size: 0 0;
+}
+
+
+/******* INPUT BAR *******/
+
+#input-bar {
+    height: 1;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    align: left middle;
+    transition: background 100ms in_out_cubic;
+}
+
+#input-bar.input-error {
+    background: #35181A;
+}
+
+#input-prompt {
+    width: 2;
+    color: #FFFFFF;
+    padding: 0;
+    content-align: left middle;
+    background: transparent;
+    transition: color 100ms in_out_cubic, background 100ms in_out_cubic;
+}
+
+#input-prompt.input-error {
+    color: #FF4F5E;
+    background: #35181A;
+}
+
+#cmd-input {
+    width: 1fr;
+    background: transparent;
+    color: #ECD251;
+    border: none;
+    padding: 0;
+    margin: 0;
+    transition: background 100ms in_out_cubic;
+    background-tint: transparent;
+}
+
+#cmd-input.input-error {
+    background: #35181A;
+    background-tint: transparent;
+}
+
+#cmd-input > .input--placeholder {
+    background: transparent;
+    color: #909090;
+}
+
+#cmd-input.input-error > .input--placeholder {
+    background: #35181A;
+    color: #FF4F5E;
+}
+
+#cmd-input > .input--cursor {
+    background: #FFFFFF;
+    color: #252525;
+    transition: background 100ms in_out_cubic, color 100ms in_out_cubic;
+}
+
+#cmd-input.input-error > .input--cursor {
+    background: #FF4F5E;
+    color: #35181A;
+}
+
+#cmd-input.filled {
+    color: #ECD251;
+}
+
+#cmd-input:focus {
+    border: none;
+    background: transparent;
+    background-tint: transparent;
+}
+
+#cmd-input.input-error:focus {
+    background: #35181A;
+    background-tint: transparent;
+}
+
+#cmd-input > .input--suggestion {
+    color: #909090;
+}
+
+
+
+/******* STATUS BAR *******/
+
+#status-bar {
+    height: 1;
+    width: 100%;
+    padding: 0 1;
+    background: transparent;
+}
