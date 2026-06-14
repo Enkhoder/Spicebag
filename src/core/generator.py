@@ -217,6 +217,9 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
         rngSeed = int.from_bytes(permKey[:8], "big")
         rng = random.Random(rngSeed)
 
+        if progressCallback:
+            progressCallback(1 / (count + 1))
+
     else:
         maskKey = None
         rngSeed = None
@@ -280,7 +283,10 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             imgByteArr.close()
 
             if progressCallback:
-                progressCallback((i + 1) / count)
+                if salt:
+                    progressCallback((i + 2) / (count + 1))
+                else:
+                    progressCallback((i + 1) / count)
 
 
 
