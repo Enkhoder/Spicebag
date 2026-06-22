@@ -17,12 +17,42 @@ import struct
 
 ######## PNG VALIDATOR ########
 
-def isAcceptablePNG(path) -> bool:
+def detectFileFormat(data: bytes) -> str | None:
+    if data[:3] == b"\xff\xd8\xff":
+        return "JPG"
+
+    if data[:4] == b"%PDF":
+        return "PDF"
+
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "GIF"
+
+    if data[:2] == b"BM":
+        return "BMP"
+
+    if data[:4] in (b"II*\x00", b"MM\x00*"):
+        return "TIFF"
+
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "WEBP"
+
+    if data[:4] == b"PK\x03\x04":
+        return "ZIP"
+
+    return None
+
+
+def validatePNGStructure(path) -> None:
     with open(path, "rb") as f:
         data = f.read()
 
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return False
+        fmt = detectFileFormat(data)
+
+        if fmt is not None:
+            raise ValueError(f"The file is in {fmt}. Please select a PNG file.")
+
+        raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
 
     i = 8
 
@@ -31,11 +61,9 @@ def isAcceptablePNG(path) -> bool:
         chunk = data[i+4:i+8]
 
         if chunk in FORBIDDEN_CHUNKS:
-            return False
+            raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
 
         i += 12 + length
-
-    return True
 
 
 def getGridDimensions(width: int, height: int):
@@ -87,10 +115,7 @@ def extractRGB(pixel):
 
 
 def validateImage(path) -> bool:
-    if not isAcceptablePNG(path):
-        raise ValueError(
-            "PNG contains forbidden chunks or unacceptable color space."
-        )
+    validatePNGStructure(path)
 
     img = Image.open(path)
     pixels = img.load()
@@ -107,18 +132,29 @@ def validateImage(path) -> bool:
     cellWidth = width // cols
     cellHeight = height // rows
 
+    contaminated = 0
+
     for r in range(rows):
         for c in range(cols):
             basePx = pixels[c * cellWidth, r * cellHeight]
             baseColor = extractRGB(basePx)
+            cellBad = False
 
             for y in range(r * cellHeight, (r + 1) * cellHeight):
                 for x in range(c * cellWidth, (c + 1) * cellWidth):
                     if extractRGB(pixels[x, y]) != baseColor:
-                        raise ValueError(
-                            "Non-monochromatic cell(s) detected.\n"
-                            "—————> Image might have been compressed."
-                        )
+                        cellBad = True
+                        break
+
+                if cellBad:
+                    break
+
+            if cellBad:
+                contaminated += 1
+
+    if contaminated:
+        noun = "cell" if contaminated == 1 else "cells"
+        raise ValueError(f"{contaminated} contaminated {noun} detected.")
 
     return True
 

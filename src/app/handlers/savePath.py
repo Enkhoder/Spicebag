@@ -79,43 +79,26 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
 
 ######## DECODE PATH PARSER ########
 
-def parseDecodePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
+def parseDecodePath(raw: str) -> tuple[str, str]:
     """
-    Parse a combined directory + filename string for image decoding.
+    Split a decode-path string into (directory, filename) on the LAST run of
+    two or more characters from [/\\].
 
-    Unlike parseSavePath, a filename is mandatory: decoding has no default
-    target, so empty input and bare directories (no separator) are rejected.
-    The separator is the LAST run of two or more characters from [/\\].
-
-        "<sep><stem>"        -> ("", "<stem>")       default dir, custom stem
+        "<sep><stem>"        -> ("", "<stem>")       default dir, custom file
         "<dir><sep><stem>"   -> ("<dir>", "<stem>")  both custom
+        "<dir>"              -> ("<dir>", "")         no separator: dir only
 
-    Returns:
-        (dir_str, stem_str)  — empty dir_str means "use default dir".
-        str                  — error message if the input is invalid.
+    An empty filename means the input names a directory rather than a file;
+    the caller decides which error applies (see _handleDecodePath).
     """
-
-    if not raw.strip():
-        return "Please enter the encoded image's path and filename."
 
     matches = list(_SLASH_RUN.finditer(raw))
 
     if not matches:
-        return "Filename must follow a double slash. Use 'directory//filename' or '//filename'."
+        return (raw, "")
 
     last = matches[-1]
-    dirStr = raw[:last.start()]
-    stem = raw[last.end():]
-
-    if not stem:
-        return "Blank filename is not valid. Remove any trailing slashes."
-
-    err = _validateStem(stem)
-
-    if err:
-        return err
-
-    return (dirStr, stem)
+    return (raw[:last.start()], raw[last.end():])
 
 
 def _validateStem(stem: str) -> str | None:

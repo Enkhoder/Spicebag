@@ -38,35 +38,33 @@ class DecodeHandlerMixin:
         if getattr(self, "_decodeValidating", False):
             return
 
-        defaultDir = OUTPUT_DIR / "encoded-images"
-        result = parseDecodePath(rawValue, defaultDir)
-
-        if isinstance(result, str):
-            self._addNote(Text(result, style=f"bold {C_FAIL}"))
+        if not rawValue.strip():
+            self._addNote(Text("Please enter an image file path.", style=f"bold {C_FAIL}"))
             return
 
-        dirStr, stem = result
+        defaultDir = OUTPUT_DIR / "encoded-images"
+        dirStr, stem = parseDecodePath(rawValue)
         targetDir = Path(dirStr) if dirStr else defaultDir
-        fileName = stem if stem.lower().endswith(".png") else stem + ".png"
 
-        # ── Path / directory / file existence (fast stat checks) ────────────
-        if dirStr:
-            if not targetDir.exists():
+        # ── No filename: the input names a directory, not an image file ─────
+        if not stem:
+            if self._isDir(targetDir):
+                self._addNote(Text("The path is a directory. Please specify a PNG image file.",
+                                   style=f"bold {C_FAIL}"))
+            else:
                 self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
-                return
-            if not targetDir.is_dir():
-                self._addNote(Text("Path is not a directory.", style=f"bold {C_FAIL}"))
-                return
+            return
 
+        # ── Filename given: directory must be valid, file must exist ────────
+        if not self._isDir(targetDir):
+            self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
+            return
+
+        fileName = stem if stem.lower().endswith(".png") else stem + ".png"
         fullPath = targetDir / fileName
 
-        if fullPath.is_dir():
-            self._addNote(Text("The path is a directory. Please specify a PNG image file.",
-                               style=f"bold {C_FAIL}"))
-            return
-        if not fullPath.exists():
-            self._addNote(Text("File not found. Please verify the file path and try again.",
-                               style=f"bold {C_FAIL}"))
+        if not self._isFile(fullPath):
+            self._addNote(Text("File not found.", style=f"bold {C_FAIL}"))
             return
 
         # ── Image type / integrity (threaded — validateImage scans pixels) ──
@@ -93,15 +91,31 @@ class DecodeHandlerMixin:
         self._addStep(self._promptMarkup(AppState.DECODE_SALT))
 
 
+    @staticmethod
+    def _isDir(path) -> bool:
+        try:
+            return path.is_dir()
+        except OSError:
+            return False
+
+
+    @staticmethod
+    def _isFile(path) -> bool:
+        try:
+            return path.is_file()
+        except OSError:
+            return False
+
+
     @work(thread=True, exit_on_error=False)
     def _validateImageInThread(self, path: str) -> typing.Optional[str]:
         try:
             validateImage(path)
             return None
         except FileNotFoundError:
-            return "File not found. Please verify the file path and try again."
+            return "File not found."
         except PermissionError:
-            return "Permission denied. Please ensure you have read access to the file."
+            return "Permission denied. Make sure you have read access to the file."
         except ValueError as e:
             return str(e)
         except Exception:

@@ -836,10 +836,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         """Cycle through the main commands using TAB."""
         inp: SecureInput = self.query_one("#cmd-input", SecureInput)
 
-        if self._state == AppState.ENCODE_SAVE_PATH:
+        if self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             if not inp.value:
                 from src.constants.theme import OUTPUT_DIR
                 defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
+                if self._state == AppState.DECODE_PATH:
+                    defaultStr += "//"
                 inp.value = defaultStr
                 inp.cursor_position = len(defaultStr)
                 inp.isFilled = True
@@ -957,10 +959,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._state == AppState.IDLE:
             inp.placeholder = ""
 
-        elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
+        elif self._state == AppState.ENCODE_SAVE_PATH:
             from src.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
             inp.placeholder = f"{defaultStr}"
+
+        elif self._state == AppState.DECODE_PATH:
+            from src.constants.theme import OUTPUT_DIR
+            defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
+            inp.placeholder = f"{defaultStr}//"
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
             if getattr(self, "_processing", False):
