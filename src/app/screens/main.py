@@ -37,13 +37,32 @@ class ClickableLog(RichLog):
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
-        handler = getattr(self.screen, "_handleSampleClick", None)
+        line = event.y + self.scroll_offset.y
+        col = event.x + self.scroll_offset.x
+
+        sampleClick = getattr(self.screen, "_handleSampleClick", None)
+        if sampleClick is not None:
+            sampleClick(line, col)
+
+        seedClick = getattr(self.screen, "_handleSeedClick", None)
+        if seedClick is not None:
+            seedClick(line, col)
+
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        handler = getattr(self.screen, "_handleWordHover", None)
         if handler is None:
             return
 
         line = event.y + self.scroll_offset.y
         col = event.x + self.scroll_offset.x
         handler(line, col)
+
+
+    def on_leave(self, event: events.Leave) -> None:
+        handler = getattr(self.screen, "_clearWordHover", None)
+        if handler is not None:
+            handler()
 
 
 ######## MAIN SCREEN ########
@@ -72,7 +91,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodeFileStem = ""
         self._decodePath = ""
         self._decodeSalt = ""
+        self._decodeWordCount = 0
         self._decodeValidating = False
+        self._decodeInProgress = False
+        self._decodeAbortHandled = False
+        self._decodeToken = 0
         self._readyAt = 0.0
         self._tabIndex = -1
         self._processing = False
@@ -102,6 +125,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._branchFlickerPercent: float = 0.0
         self._encodeStartTime: float = 0.0
         self._encodeFinalElapsedMs: float | None = None
+
+        # ── Interactive masked-word output (decoded grid / invalid words) ────
+        self._activeSeedNode: TreeNode | None = None
+        self._seedRevealTimer: asyncio.TimerHandle | None = None
+        self._hoverRegions: list = []
 
         # ── Interactive image sample ─────────────────────────────────────────
         self._colorSpace = None
@@ -362,6 +390,43 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         inp.value = ""
         inp.isFilled = False
 
+        # Encoding tears down through its worker's finally block; decoding blocks
+        # on a key-derivation thread that cannot be interrupted, so abort its UI
+        # immediately and let the orphaned worker's result be discarded.
+        if getattr(self, "_decodeInProgress", False):
+            self._finalizeDecodeAbort()
+
+
+    def _finalizeDecodeAbort(self) -> None:
+        if self._decodeAbortHandled:
+            return
+        self._decodeAbortHandled = True
+
+        self._stopBranchFlicker()
+        if self._encodingNode is not None:
+            self._encodingNode.connStyle = C_DIM
+
+        self._processing = False
+        self._decodeInProgress = False
+        self._tabIndex = -1
+        self._lastIdentifiedCommand = ""
+
+        self._addResult(Text("Operation aborted.", style=f"bold {C_FAIL}"), C_FAIL)
+
+        self._encodingNode = None
+        self._decodePath = ""
+        self._decodeSalt = ""
+        self._setState(AppState.IDLE)
+
+        try:
+            inp = self.query_one("#cmd-input", SecureInput)
+            inp.value = ""
+            inp.isFilled = False
+        except Exception:
+            pass
+
+        self._rebuild()
+
 
     # ─────────────────────────────── RENDER ─────────────────────────────────
 
@@ -407,13 +472,19 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 else:
                     log.write(item)
 
-            lines, sampleHit = renderBlocks(self._blocks, self._logWidth(), self.app.console)
+            lines, sampleHit, hoverRegions = renderBlocks(self._blocks, self._logWidth(), self.app.console)
             for line in lines:
                 log.write(line)
 
+        welcomeOffset = len(log.lines) - len(lines)
+
+        self._hoverRegions = [
+            (lineIdx + welcomeOffset, colStart, colEnd, node, wordIdx)
+            for (lineIdx, colStart, colEnd, node, wordIdx) in hoverRegions
+        ]
+
         if sampleHit is not None:
             firstBlockLine, blockCol, cols, rows = sampleHit
-            welcomeOffset = len(log.lines) - len(lines)
             self._sampleStartLine = welcomeOffset + firstBlockLine
             self._sampleBlockCol = blockCol
             self._sampleCols = cols
@@ -460,6 +531,131 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if node is not None:
             node.sampleMasked = True
             node.sampleClickable = False
+            self._rebuild(scrollToEnd=False)
+
+
+    # ──────────────────── DECODED SEED GRID / MASKED WORDS ───────────────────
+
+    def _showSeedGrid(self, words: list[str]) -> None:
+        from src.constants.theme import GRID_SIZES
+
+        cols, rows = GRID_SIZES.get(len(words), (1, len(words)))
+        header = Text(f"{len(words)} words recovered:", style=f"bold {C_SUCC}")
+        resultBranch = TreeNode(kind="branch", text=header, connStyle=C_SUCC)
+        seedNode = TreeNode(
+            kind="seedgrid", words=list(words), cols=cols, rows=rows,
+            connStyle=C_SUCC, interactive=True, revealAll=True, hoverIdx=-1,
+        )
+
+        # The header and grid sit as siblings under the decoding node, so the
+        # whole C_SUCC connector chain runs straight down to the last word row.
+        parent = self._encodingNode if self._encodingNode is not None else self._curStep
+        if parent is not None:
+            parent.children.append(resultBranch)
+            parent.children.append(seedNode)
+
+        self._activeSeedNode = seedNode
+        self._rebuild()
+        self._scheduleSeedMask(seedNode)
+
+
+    def _scheduleSeedMask(self, node: TreeNode) -> None:
+        if self._seedRevealTimer is not None:
+            self._seedRevealTimer.cancel()
+        self._seedRevealTimer = asyncio.get_event_loop().call_later(
+            3.0, lambda: self._endSeedReveal(node)
+        )
+
+
+    def _endSeedReveal(self, node: TreeNode) -> None:
+        self._seedRevealTimer = None
+        if node.interactive and node.revealAll:
+            node.revealAll = False
+            self._rebuild(scrollToEnd=False)
+
+
+    def _addInvalidWordsNote(self, words: list[str], prefix: str = "") -> None:
+        if self._curStep is not None:
+            self._curStep.children.append(TreeNode(
+                kind="invalidnote", words=list(words), prefixMsg=prefix,
+                interactive=True, hoverIdx=-1,
+            ))
+        self._rebuild()
+
+
+    def _maskActiveSeed(self) -> None:
+        node = self._activeSeedNode
+        if node is None:
+            return
+
+        self._activeSeedNode = None
+        if self._seedRevealTimer is not None:
+            self._seedRevealTimer.cancel()
+            self._seedRevealTimer = None
+
+        node.interactive = False
+        node.revealAll = False
+        node.hoverIdx = -1
+        self._rebuild(scrollToEnd=False)
+
+
+    def _handleSeedClick(self, line: int, col: int) -> None:
+        node = self._activeSeedNode
+        if node is None or not node.interactive or node.revealAll:
+            return
+
+        hit = any(
+            r[3] is node and r[0] == line and r[1] <= col < r[2]
+            for r in self._hoverRegions
+        )
+        if not hit:
+            return
+
+        node.revealAll = True
+        self._scheduleSeedMask(node)
+        self._rebuild(scrollToEnd=False)
+
+
+    def _uniqueHoverNodes(self) -> list[TreeNode]:
+        nodes: list[TreeNode] = []
+        seen: set[int] = set()
+        for region in self._hoverRegions:
+            node = region[3]
+            if id(node) not in seen:
+                seen.add(id(node))
+                nodes.append(node)
+        return nodes
+
+
+    def _handleWordHover(self, line: int, col: int) -> None:
+        target: tuple[TreeNode, int] | None = None
+
+        for regionLine, colStart, colEnd, node, wordIdx in self._hoverRegions:
+            if line == regionLine and colStart <= col < colEnd:
+                target = (node, wordIdx)
+                break
+
+        changed = False
+
+        for node in self._uniqueHoverNodes():
+            want = target[1] if (target is not None and target[0] is node) else -1
+            if node.hoverIdx != want:
+                node.hoverIdx = want
+                changed = True
+
+        if changed:
+            self._rebuild(scrollToEnd=False)
+
+
+    def _clearWordHover(self) -> None:
+        changed = False
+
+        for node in self._uniqueHoverNodes():
+            if node.hoverIdx != -1:
+                node.hoverIdx = -1
+                changed = True
+
+        if changed:
             self._rebuild(scrollToEnd=False)
 
 
@@ -755,9 +951,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
-        if self._state in (AppState.ENCODE_SALT, AppState.DECODE_SALT):
+        if self._state == AppState.ENCODE_SALT:
             return (
                 f"[{C_DIM}]Salt adds significant entropy to raw images  "
+                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
+            )
+
+        if self._state == AppState.DECODE_SALT:
+            return (
+                f"[{C_DIM}]Image cannot be decoded if the salt is lost  "
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
@@ -797,10 +999,17 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             return base + f"  [{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
 
         if self._state == AppState.DECODE_CONFIRM:
-            return (
-                f"[{C_DIM}]Press ENTER to confirm and decode or ESC to step back  "
-                + f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
+            wordCount = getattr(self, "_decodeWordCount", 0)
+            saltStr = "true" if self._decodeSalt else "false"
+            saltColor = C_SUCC if self._decodeSalt else C_FAIL
+
+            base = (
+                f"[{C_DIM}]seed words: [/][{C_WC}]{wordCount}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]salt: [/][{saltColor}]{saltStr}[/]"
             )
+            if getattr(self, "_processing", False):
+                return base
+            return base + f"  [{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
 
         return ""
 
@@ -952,7 +1161,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         inp.password = False
 
         if getattr(self, "_processing", False):
-            inp.placeholder = f"Type [bold]cancel[/] to abort seed image encoding"
+            verb = "decoding" if getattr(self, "_decodeInProgress", False) else "encoding"
+            inp.placeholder = f"Type [bold]cancel[/] to abort seed image {verb}"
             self._updateStatusBar()
             return
 
@@ -971,7 +1181,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
             if getattr(self, "_processing", False):
-                inp.placeholder = "Type [bold]cancel[/] to abort seed image encoding"
+                verb = "decoding" if getattr(self, "_decodeInProgress", False) else "encoding"
+                inp.placeholder = f"Type [bold]cancel[/] to abort seed image {verb}"
             else:
                 inp.placeholder = "Press [bold]ENTER[/] to confirm"
 
@@ -1195,6 +1406,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     async def _handleCommand(self, raw: str, executed_cmd: str | None = None) -> None:
+        # Any command following a decoded phrase permanently masks it, mirroring
+        # the interactive encode sample.
+        self._maskActiveSeed()
+
         cmd = (executed_cmd if executed_cmd is not None else raw).strip().lower()
         display = raw.strip()
 

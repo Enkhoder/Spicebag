@@ -1,7 +1,7 @@
 ######## LIBRARIES ########
 
 from src.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_WHITE, C_IMG, AppState, OUTPUT_DIR
-from src.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic
+from src.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
 from src.app.handlers.savePath import parseSavePath
 from rich.style import Style
 from rich.text import Text
@@ -53,6 +53,7 @@ class EncodeHandlerMixin:
         def _addAnswer(self, value: str, style: str = ..., connStyle: str = ...) -> None: ...
         def _addDashbar(self, connStyle: str = ...) -> None: ...
         def _addNote(self, content: typing.Any) -> None: ...
+        def _addInvalidWordsNote(self, words: list, prefix: str = ...) -> None: ...
         def _addStep(self, markup: str) -> typing.Any: ...
         def _addResult(self, text: typing.Any, connStyle: str,
                        body: typing.Any = ..., hints: typing.Any = ...) -> None: ...
@@ -122,6 +123,11 @@ class EncodeHandlerMixin:
 
         try:
             identifySeedType(normalized, expectedLength=self._wordCount)
+        except InvalidSeedWordsError as e:
+            self._addInvalidWordsNote(e.words, e.prefix)
+            from src.app.widgets.secureInput import SecureInput
+            self.query_one("#cmd-input", SecureInput).value = ""
+            return
         except ValueError as e:
             self._addNote(Text(str(e), style=f"bold {C_FAIL}"))
             from src.app.widgets.secureInput import SecureInput

@@ -1,7 +1,7 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_FAIL, AppState, C_SUCC, C_INP, C_WHITE
-from src.app.handlers.savePath import parseDecodePath
+from src.constants.theme import C_FAIL, AppState, C_INP
+from src.app.handlers.savePath import parseDecodePath, _validateStem
 from src.core.decoder import decodeImage, validateImage
 from rich.text import Text
 from textual import work
@@ -14,12 +14,19 @@ class DecodeHandlerMixin:
     if typing.TYPE_CHECKING:
         _decodePath: str
         _decodeSalt: str
+        _decodeWordCount: int
+        _decodeInProgress: bool
+        _decodeAbortHandled: bool
+        _decodeToken: int
         _state: AppState
         _processing: bool
         _decodeValidating: bool
         _curStep: typing.Any
         _encodingNode: typing.Any
+        _cancelFlag: bool
         app: typing.Any
+        def _showSeedGrid(self, words: list) -> None: ...
+        def _finalizeDecodeAbort(self) -> None: ...
         def _addNote(self, content: typing.Any) -> None: ...
         def _addDashbar(self, connStyle: str = ...) -> None: ...
         def _addStep(self, markup: str) -> typing.Any: ...
@@ -66,7 +73,21 @@ class DecodeHandlerMixin:
             self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
             return
 
-        fileName = stem if stem.lower().endswith(".png") else stem + ".png"
+        stemErr = _validateStem(stem)
+
+        if stemErr is not None:
+            self._addNote(Text(stemErr, style=f"bold {C_FAIL}"))
+            return
+
+        if "." not in stem:
+            self._addNote(Text("File extension is missing.", style=f"bold {C_FAIL}"))
+            return
+
+        if not stem.lower().endswith(".png"):
+            self._addNote(Text("Only PNG image files are supported.", style=f"bold {C_FAIL}"))
+            return
+
+        fileName = stem
         fullPath = targetDir / fileName
 
         if not self._isFile(fullPath):
@@ -92,9 +113,23 @@ class DecodeHandlerMixin:
             return
 
         self._decodePath = str(fullPath)
+        self._decodeWordCount = self._readWordCount(str(fullPath))
         self._addDashbar(C_INP)
         self._setState(AppState.DECODE_SALT)
         self._addStep(self._promptMarkup(AppState.DECODE_SALT))
+
+
+    @staticmethod
+    def _readWordCount(path: str) -> int:
+        from src.core.decoder import getGridDimensions
+        from PIL import Image
+
+        try:
+            with Image.open(path) as img:
+                width, height = img.size
+            return getGridDimensions(width, height)[2]
+        except Exception:
+            return 0
 
 
     @staticmethod
@@ -136,16 +171,25 @@ class DecodeHandlerMixin:
     @work
     async def _runDecode(self, salt: str) -> None:
         self._processing = True
+        self._decodeInProgress = True
+        self._decodeAbortHandled = False
+        self._decodeToken += 1
+        token = self._decodeToken
         self._encodingNode = None
 
         # The image was already validated at the path-input stage, so the only
         # thing left to verify here is the salt. The progress bar advances one
-        # uniform step per word recovered (see decodeImage).
+        # uniform step per word recovered (see decodeImage); a wrong salt fails
+        # validation wholesale and leaves the bar at 0%.
         self._startLoader("Decoding seed image")
 
         try:
             worker = self._runDecodeInThread(self._decodePath, salt)
             await worker.wait()
+
+            if token != self._decodeToken or self._decodeAbortHandled:
+                return
+
             if worker.error is not None:
                 raise worker.error
             mnemonic = worker.result
@@ -154,27 +198,37 @@ class DecodeHandlerMixin:
 
             words = mnemonic.split()
             self._stopLoader()
-            decoded = Text(f"Decoded: {len(words)} words recovered:", style=C_WHITE)
-            wordLines = [Text(f"{i:>2}.  {w}", style=C_WHITE) for i, w in enumerate(words, 1)]
-            self._addResult(decoded, C_SUCC, hints=wordLines)
+            self._showSeedGrid(words)
+
+        except InterruptedError:
+            if token == self._decodeToken and not self._decodeAbortHandled:
+                self._finalizeDecodeAbort()
 
         except Exception:
+            if token != self._decodeToken or self._decodeAbortHandled:
+                return
             self._stopLoader(warn=True)
             saltError = "Salt is incorrect." if salt else "Image is salted."
             self._addResult(Text(saltError, style=f"bold {C_FAIL}"), C_FAIL)
 
         finally:
-            self._stopBranchFlicker()
-            self._processing = False
-            self._decodePath = ""
-            self._decodeSalt = ""
-            self._encodingNode = None
-            self._setState(AppState.IDLE)
+            if token == self._decodeToken and not self._decodeAbortHandled:
+                self._stopBranchFlicker()
+                self._processing = False
+                self._decodeInProgress = False
+                self._decodePath = ""
+                self._decodeSalt = ""
+                self._encodingNode = None
+                self._setState(AppState.IDLE)
 
 
     @work(thread=True, exit_on_error=False)
     def _runDecodeInThread(self, path: str, salt: str) -> str:
         def p_cb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
+        def c_check() -> bool:
+            return getattr(self, "_cancelFlag", False)
 
-        return decodeImage(path, salt=salt, progressCallback=p_cb, validate=False)
+        return decodeImage(
+            path, salt=salt, progressCallback=p_cb, validate=False, cancelCheck=c_check
+        )

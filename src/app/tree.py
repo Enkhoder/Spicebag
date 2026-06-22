@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_DIM, C_INP, C_IMG, C_WHITE, bannerGradientHex
+from src.constants.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex
 from dataclasses import dataclass, field
 from rich.console import Console
 from rich.cells import cell_len
@@ -22,6 +22,16 @@ class TreeNode:
     sampleSpace: typing.Any = None
     sampleMasked: bool = False
     sampleClickable: bool = False
+
+    # ── Interactive masked-word nodes (seedgrid / invalidnote) ───────────────
+    words: list[str] = field(default_factory=list)
+    cols: int = 0
+    rows: int = 0
+    interactive: bool = False
+    revealAll: bool = False
+    hoverIdx: int = -1
+    screenshotMask: bool = False
+    prefixMsg: str = ""
 
 
 @dataclass
@@ -93,6 +103,7 @@ def _renderChildren(
     out: list[Text],
     isRoot: bool,
     hitSink: list,
+    hoverSink: list,
 ) -> None:
     lastIdx = len(children) - 1
 
@@ -126,7 +137,10 @@ def _renderChildren(
                     hintPrefix = prefix + ext
                     _emitWrapped(out, hintPrefix, hintPrefix, hintLine, width, console)
 
-                _renderChildren(child.children, prefix + ext, width, console, out, isRoot=False, hitSink=hitSink)
+                _renderChildren(
+                    child.children, prefix + ext, width, console, out,
+                    isRoot=False, hitSink=hitSink, hoverSink=hoverSink,
+                )
 
             if isRoot and not isLast and child.kind == "branch" and child.children:
                 out.append(_mkText(prefix + [("│", C_DIM)]))
@@ -157,9 +171,104 @@ def _renderChildren(
             if not isLast:
                 out.append(_mkText(prefix + [("│", C_DIM)]))
 
-        elif child.kind == "note":
+        elif child.kind == "seedgrid":
+            isLast = (i == lastIdx)
+            cols = child.cols
+            rows = child.rows
+            words = child.words
+
+            out.append(_mkText(prefix + [("│", child.connStyle)]))
+
+            for r in range(rows):
+                if r == 0:
+                    conn = [("├── ", child.connStyle)]
+                elif r == rows - 1:
+                    conn = [(("└── " if isLast else "├── "), child.connStyle)]
+                else:
+                    conn = [("│   ", child.connStyle)]
+
+                rowPrefix = prefix + conn
+                baseCol = _prefixWidth(rowPrefix)
+                rowText = _mkText(rowPrefix)
+                lineIdx = len(out)
+
+                for c in range(cols):
+                    wordIdx = r * cols + c
+
+                    if wordIdx >= len(words):
+                        break
+
+                    if c > 0:
+                        rowText.append("  ")
+
+                    rowText.append(f"{wordIdx + 1:>2}", style=C_DIM)
+                    rowText.append(". ", style=C_DIM)
+
+                    word = words[wordIdx]
+                    colStart = baseCol + c * 14 + 4
+                    revealed = (
+                        not child.screenshotMask and child.interactive
+                        and (child.revealAll or wordIdx == child.hoverIdx)
+                    )
+
+                    if revealed:
+                        rowText.append(word, style=C_WC)
+                        pad = 8 - cell_len(word)
+                        if pad > 0:
+                            rowText.append(" " * pad)
+                    else:
+                        for k in range(8):
+                            t = (c * 8 + k) / max(1, cols * 8 - 1)
+                            rowText.append("█", style=bannerGradientHex(t))
+
+                    if child.interactive:
+                        hoverSink.append((lineIdx, colStart, colStart + 8, child, wordIdx))
+
+                out.append(rowText)
+
+            if not isLast:
+                out.append(_mkText(prefix + [("│", child.connStyle)]))
+
+        elif child.kind == "invalidnote":
             notePrefix = prefix + [("│", C_DIM), (" ", None)]
-            _emitWrapped(out, notePrefix, notePrefix, child.text, width, console)
+            baseCol = _prefixWidth(notePrefix)
+            rowText = _mkText(notePrefix)
+            lineIdx = len(out)
+
+            words = child.words
+            style = f"bold {C_FAIL}"
+            plural = "words" if len(words) > 1 else "word"
+
+            if child.prefixMsg:
+                head = f"{child.prefixMsg}, invalid seed {plural} '"
+            else:
+                head = f"Invalid seed {plural} '"
+
+            rowText.append(head, style=style)
+            col = baseCol + cell_len(head)
+
+            for wi, w in enumerate(words):
+                if wi > 0:
+                    rowText.append(" ", style=style)
+                    col += 1
+
+                revealed = (not child.screenshotMask) and (wi == child.hoverIdx)
+
+                if revealed:
+                    rowText.append(w, style=style)
+                else:
+                    rowText.append("█" * len(w), style=style)
+
+                hoverSink.append((lineIdx, col, col + len(w), child, wi))
+                col += len(w)
+
+            rowText.append("'.", style=style)
+            out.append(rowText)
+
+        elif child.kind == "note":
+            noteFirst = prefix + [("│", C_DIM), (" ", None)]
+            noteCont = prefix + [("│", C_DIM), ("   ", None)]
+            _emitWrapped(out, noteFirst, noteCont, child.text, width, console)
 
         elif child.kind == "shotgroup":
             headerPrefix = prefix + [("│", C_DIM), (" ", None)]
@@ -173,13 +282,15 @@ def _renderChildren(
                 _emitWrapped(out, firstPrefix, contPrefix, shot.text, width, console)
 
 
-def renderBlocks(blocks: list[RootNode], width: int, console: Console) -> tuple[list[Text], tuple | None]:
+def renderBlocks(blocks: list[RootNode], width: int, console: Console) -> tuple[list[Text], tuple | None, list]:
     """Render the whole conversation forest into fully-styled, pre-wrapped lines.
 
-    Returns the lines plus a hit descriptor for the single active clickable image
-    sample, if any: (firstBlockLineIndex, blockStartCol, cols, rows)."""
+    Returns the lines, a hit descriptor for the single active clickable image
+    sample if any (firstBlockLineIndex, blockStartCol, cols, rows), and a list of
+    hoverable masked-word regions (lineIndex, colStart, colEnd, node, wordIndex)."""
     out: list[Text] = []
     hitSink: list = []
+    hoverSink: list = []
     width = max(8, width)
 
     for root in blocks:
@@ -198,6 +309,9 @@ def renderBlocks(blocks: list[RootNode], width: int, console: Console) -> tuple[
                 _emitWrapped(out, [("  ", None)], [("  ", None)], raw, width, console)
             continue
 
-        _renderChildren(root.children, [], width, console, out, isRoot=True, hitSink=hitSink)
+        _renderChildren(
+            root.children, [], width, console, out,
+            isRoot=True, hitSink=hitSink, hoverSink=hoverSink,
+        )
 
-    return out, (hitSink[0] if hitSink else None)
+    return out, (hitSink[0] if hitSink else None), hoverSink

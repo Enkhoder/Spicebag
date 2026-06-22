@@ -163,59 +163,7 @@ def validateImage(path) -> bool:
 
 ######## IMAGE DECODER ########
 
-def decodeImage(imagePath, salt="", progressCallback=None, validate=True):
-    if validate:
-        validateImage(imagePath)
-
-    img = Image.open(imagePath)
-    pixels = img.load()
-
-    if pixels is None:
-        raise ValueError("Failed to load image pixel data.")
-
-    width, height = img.size
-    cols, rows, numWords, maxIdx = getGridDimensions(width, height)
-
-    cellWidth = width // cols
-    cellHeight = height // rows
-
-    if salt:
-        masterKey = deriveMasterKey(salt)
-        maskKey, permKey, _ = deriveSubkeys(masterKey)
-        rngSeed = int.from_bytes(permKey[:8], "big")
-
-    else:
-        maskKey = None
-        rngSeed = None
-
-    allCoords = [(r, c) for r in range(rows) for c in range(cols)]
-
-    if rngSeed is not None:
-        random.Random(rngSeed).shuffle(allCoords)
-
-    wordIndices = []
-
-    for i in range(numWords):
-        r, c = allCoords[i]
-
-        basePx = pixels[c * cellWidth, r * cellHeight]
-        baseColor = extractRGB(basePx)
-
-        wordMask = deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0
-        currentShift = RGB_VALUE_SHIFTS[i]
-
-        wordIndices.append(
-            decodeColor(
-                baseColor,
-                mask=wordMask,
-                shift=currentShift,
-                maxIndex=maxIdx
-            )
-        )
-
-        if progressCallback is not None:
-            progressCallback((i + 1) / numWords)
-
+def resolveMnemonic(wordIndices, numWords):
     if numWords in (12, 15, 18, 21, 24):
         mnemonic = " ".join(BIP39_LIST[idx] for idx in wordIndices)
 
@@ -240,4 +188,82 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True):
         except Exception:
             pass
 
-    raise ValueError("Image or salt is incorrect.")
+    return None
+
+
+def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancelCheck=None):
+    if validate:
+        validateImage(imagePath)
+
+    if cancelCheck and cancelCheck():
+        raise InterruptedError("Cancelled")
+
+    img = Image.open(imagePath)
+    pixels = img.load()
+
+    if pixels is None:
+        raise ValueError("Failed to load image pixel data.")
+
+    width, height = img.size
+    cols, rows, numWords, maxIdx = getGridDimensions(width, height)
+
+    cellWidth = width // cols
+    cellHeight = height // rows
+
+    if salt:
+        masterKey = deriveMasterKey(salt)
+
+        if cancelCheck and cancelCheck():
+            raise InterruptedError("Cancelled")
+
+        maskKey, permKey, _ = deriveSubkeys(masterKey)
+        rngSeed = int.from_bytes(permKey[:8], "big")
+
+    else:
+        maskKey = None
+        rngSeed = None
+
+    allCoords = [(r, c) for r in range(rows) for c in range(cols)]
+
+    if rngSeed is not None:
+        random.Random(rngSeed).shuffle(allCoords)
+
+    wordIndices = []
+
+    for i in range(numWords):
+        if cancelCheck and cancelCheck():
+            raise InterruptedError("Cancelled")
+
+        r, c = allCoords[i]
+
+        basePx = pixels[c * cellWidth, r * cellHeight]
+        baseColor = extractRGB(basePx)
+
+        wordMask = deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0
+        currentShift = RGB_VALUE_SHIFTS[i]
+
+        wordIndices.append(
+            decodeColor(
+                baseColor,
+                mask=wordMask,
+                shift=currentShift,
+                maxIndex=maxIdx
+            )
+        )
+
+    # A wrong salt yields in-range but incorrect indices, so the phrase fails
+    # validation wholesale. The progress bar only advances for words that belong
+    # to a successfully recovered mnemonic — a failed decode therefore stays 0%.
+    mnemonic = resolveMnemonic(wordIndices, numWords)
+
+    if mnemonic is None:
+        if progressCallback is not None:
+            progressCallback(0.0)
+
+        raise ValueError("Image or salt is incorrect.")
+
+    if progressCallback is not None:
+        for i in range(numWords):
+            progressCallback((i + 1) / numWords)
+
+    return mnemonic

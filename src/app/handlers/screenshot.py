@@ -125,9 +125,22 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     if sampleNode is not None and not sampleNode.sampleMasked:
         maskSample = True
         sampleNode.sampleMasked = True
-        _rebuild = getattr(screen, "_rebuild", None)
-        if _rebuild:
-            _rebuild(scrollToEnd=False)
+
+    # Any decoded seed grid or invalid-word note currently on screen must capture
+    # as fully masked, regardless of reveal/hover state.
+    textNodes = []
+    seen = set()
+    for region in getattr(screen, "_hoverRegions", []):
+        node = region[3]
+        if id(node) not in seen:
+            seen.add(id(node))
+            if not node.screenshotMask:
+                node.screenshotMask = True
+                textNodes.append(node)
+
+    _rebuild = getattr(screen, "_rebuild", None)
+    if (maskSample or textNodes) and _rebuild:
+        _rebuild(scrollToEnd=False)
 
     try:
         try:
@@ -138,9 +151,10 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
                 inp.placeholder = old_placeholder
             if maskSample and sampleNode is not None:
                 sampleNode.sampleMasked = False
-                _rebuild = getattr(screen, "_rebuild", None)
-                if _rebuild:
-                    _rebuild(scrollToEnd=False)
+            for node in textNodes:
+                node.screenshotMask = False
+            if (maskSample or textNodes) and _rebuild:
+                _rebuild(scrollToEnd=False)
 
         svg = cleanSvg(screen.app, svg)
         svgPath = path + ".svg"

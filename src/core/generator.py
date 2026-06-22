@@ -15,6 +15,24 @@ import io
 
 ######## MNEMONIC IDENTIFIER ########
 
+class InvalidSeedWordsError(ValueError):
+    """Raised when a phrase contains words present in no wordlist. Carries the
+    sorted offending words so the UI can mask them individually."""
+
+    def __init__(self, words: list[str], prefix: str = "") -> None:
+        self.words = list(words)
+        self.prefix = prefix
+        plural = "words" if len(self.words) > 1 else "word"
+        blocks = " ".join("█" * len(w) for w in self.words)
+
+        if prefix:
+            message = f"{prefix}, invalid seed {plural} '{blocks}'."
+        else:
+            message = f"Invalid seed {plural} '{blocks}'."
+
+        super().__init__(message)
+
+
 def binarySearchWord(wordList: list[str], word: str) -> int:
     idx = bisect.bisect_left(wordList, word)
 
@@ -49,23 +67,17 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
         suffix = "words" if n > 1 else "word"
         missingMsg = f"Missing {n} {suffix}"
 
-    invalidMsg = ""
-
     if invalidWords:
         invalidWords.sort()
-        maskedWords = [f"{w[0]}···{w[-1]}" for w in invalidWords]
-        title = "invalid seed word" if len(invalidWords) == 1 else "invalid seed words"
-        joinedWords = ", ".join(maskedWords)
-        invalidMsg = f"{title} '{joinedWords}'"
 
-    if missingMsg and invalidMsg:
-        raise ValueError(f"{missingMsg}, {invalidMsg}.")
+    if missingMsg and invalidWords:
+        raise InvalidSeedWordsError(invalidWords, prefix=missingMsg)
 
     elif missingMsg:
         raise ValueError(f"{missingMsg}.")
 
-    elif invalidMsg:
-        raise ValueError(invalidMsg.capitalize() + ".")
+    elif invalidWords:
+        raise InvalidSeedWordsError(invalidWords)
 
     candidateStandards = [s for s in SEED_TYPE_STANDARDS if numWords in s[1]]
 
