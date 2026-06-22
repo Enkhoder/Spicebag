@@ -23,12 +23,12 @@ class InvalidSeedWordsError(ValueError):
         self.words = list(words)
         self.prefix = prefix
         plural = "words" if len(self.words) > 1 else "word"
-        blocks = " ".join("█" * len(w) for w in self.words)
+        masked = ", ".join("·" * len(w) for w in self.words)
 
         if prefix:
-            message = f"{prefix}, invalid seed {plural} '{blocks}'."
+            message = f"{prefix}, invalid seed {plural} '{masked}'."
         else:
-            message = f"Invalid seed {plural} '{blocks}'."
+            message = f"Invalid seed {plural} '{masked}'."
 
         super().__init__(message)
 

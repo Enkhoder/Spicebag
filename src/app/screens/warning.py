@@ -47,10 +47,10 @@ class WarningScreen(Screen):
             f"[bold {C_FAIL}]S E C U R I T Y   W A R N I N G[/]\n\n"
             f"[bold {C_FAIL}]————————————————————————————————————————————————————————————[/]\n"
             "You are about to encode or decode a visual representation of\n"
-            f"a wallet [bold {C_FAIL}]SEED PHRASE[/].\n\n"
-            f"Turning on [bold {C_FAIL}]AIRPLANE MODE[/] is highly advised for heightened\n"
+            f"a wallet [{C_FAIL}]seed phrase[/].\n\n"
+            f"Turning off [{C_FAIL}]all connections[/] is highly advised for heightened\n"
             f"security during this session.\n\n"
-            f"Proceed [bold {C_FAIL}]IF AND ONLY IF[/] all of the following are true:\n\n"
+            f"Proceed [{C_FAIL}]if and only if[/] all of the following are true:\n\n"
             f"{line1}\n"
         )
 
@@ -80,7 +80,7 @@ class WarningScreen(Screen):
 
         if self._step >= 3:
             text += (
-                f"This program provides [bold {C_FAIL}]NO PROTECTION[/] against malware,\n"
+                f"This program provides [{C_FAIL}]no protection[/] against malware,\n"
                 "coercion, and espionage in any form.\n\n"
                 f"[bold {C_FAIL}]PROCEED AT YOUR OWN RISK.[/]\n"
                 f"[bold {C_FAIL}]————————————————————————————————————————————————————————————[/]"

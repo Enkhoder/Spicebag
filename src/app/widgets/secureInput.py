@@ -23,6 +23,7 @@ class SecureInput(Input):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.cursor_blink = True
+        self._ghost = ""
 
 
     def watch_isFilled(self, value: bool) -> None:
@@ -31,36 +32,27 @@ class SecureInput(Input):
 
     def watch_value(self, value: str) -> None:
         """Synchronously update autocomplete suggestion in the same transaction to prevent flickers."""
-        typed = value.lower()
+        stripped = value.lower().strip()
         state = getattr(self.screen, "_state", None)
 
         if getattr(self.screen, "_processing", False):
-            if not typed:
-                self._suggestion = ""
-            elif "cancel".startswith(typed):
-                self._suggestion = "cancel"
+            if stripped and "cancel".startswith(stripped):
+                self._ghost = "cancel"[len(stripped):]
             else:
-                self._suggestion = ""
+                self._ghost = ""
             return
 
-        if getattr(state, "name", None) != "IDLE" or not typed:
-            self._suggestion = ""
+        if getattr(state, "name", None) != "IDLE" or not stripped:
+            self._ghost = ""
             return
 
-        if typed.startswith(" "):
-            self._suggestion = ""
-            return
-
-        matches = [c for c in COMMANDS if c.startswith(typed)]
+        matches = [c for c in COMMANDS if c.startswith(stripped)]
 
         if matches:
             best = "encode" if "encode" in matches else matches[0]
-            if typed == best:
-                self._suggestion = ""
-            else:
-                self._suggestion = best
+            self._ghost = "" if stripped == best else best[len(stripped):]
         else:
-            self._suggestion = ""
+            self._ghost = ""
 
 
     def _resetSelection(self) -> None:
@@ -256,32 +248,53 @@ class SecureInput(Input):
 
     def render_line(self, y: int) -> Strip:
         if self.value or y != 0:
-            strip = self._guardLeftEdge(super().render_line(y))
+            ghost = self._ghost
 
-            suggestion_suffix = ""
-            if getattr(self, "_suggestion", "") and self._suggestion.lower().startswith(self.value.lower()):
-                suggestion_suffix = self._suggestion[len(self.value):]
+            if not ghost:
+                strip = self._guardLeftEdge(super().render_line(y))
+                newSegs = [
+                    Segment(
+                        seg.text,
+                        seg.style + Style(bold=True) if seg.style else Style(bold=True),
+                        seg.control
+                    )
+                    for seg in strip._segments
+                ]
+                return Strip(newSegs)
 
-            newSegs = []
-            for seg in strip._segments:
-                style = seg.style
-                isSuggestion = False
+            value = self.value
+            insertAt = len(value.rstrip())
+            ghostEnd = insertAt + len(ghost)
 
-                if style:
-                    if style.color and style.color.name == "#909090":
-                        isSuggestion = True
-                    elif "#909090" in str(style):
-                        isSuggestion = True
+            ghostStyle = Style(color="#909090")
+            boldStyle = Style(bold=True)
 
-                if suggestion_suffix and seg.text == suggestion_suffix:
-                    isSuggestion = True
+            chars = list(value)
+            if len(chars) < ghostEnd:
+                chars += [" "] * (ghostEnd - len(chars))
+            for i, g in enumerate(ghost):
+                chars[insertAt + i] = g
 
-                if not isSuggestion:
-                    style = style + Style(bold=True) if style else Style(bold=True)
+            display = Text("".join(chars), no_wrap=True, overflow="ignore", end="")
+            display.stylize(boldStyle, 0, insertAt)
+            display.stylize(ghostStyle, insertAt, ghostEnd)
+            display.stylize(boldStyle, ghostEnd, len(chars))
 
-                newSegs.append(Segment(seg.text, style, seg.control))
+            if self._cursor_visible and self.has_focus:
+                cursorCol = self.cursor_position
+                cursorStyle = self.get_component_rich_style("input--cursor")
 
-            return Strip(newSegs)
+                if cursorCol >= len(display):
+                    display.append(" ")
+
+                display.stylize(cursorStyle, cursorCol, cursorCol + 1)
+
+            console = self.app.console
+            consoleOptions = self.app.console_options
+            maxWidth = self.scrollable_content_region.width
+
+            strip = Strip(console.render(display, consoleOptions.update_width(maxWidth + 1)))
+            return strip.apply_style(self.rich_style)
 
         console = self.app.console
         consoleOptions = self.app.console_options

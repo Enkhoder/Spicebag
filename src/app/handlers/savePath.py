@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import os
 
 
 ######## CONSTANTS ########
@@ -15,6 +16,14 @@ RESERVED_NAMES = frozenset({
 })
 
 _SLASH_RUN = re.compile(r"[/\\]{2,}")
+
+
+######## HELPERS ########
+
+def _stripQuotes(raw: str) -> str:
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
+        return raw[1:-1]
+    return raw
 
 
 ######## SAVE PATH PARSER ########
@@ -36,6 +45,11 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
         (dir_str, stem_str)  — empty string means "use default" for that field.
         str                  — error message if the input is invalid.
     """
+
+    if not raw:
+        return ("", "")
+
+    raw = _stripQuotes(raw)
 
     if not raw:
         return ("", "")
@@ -86,19 +100,25 @@ def parseDecodePath(raw: str) -> tuple[str, str]:
 
         "<sep><stem>"        -> ("", "<stem>")       default dir, custom file
         "<dir><sep><stem>"   -> ("<dir>", "<stem>")  both custom
-        "<dir>"              -> ("<dir>", "")         no separator: dir only
+        "<dir>"              -> ("<dir>", "")        no separator: dir only
 
     An empty filename means the input names a directory rather than a file;
     the caller decides which error applies (see _handleDecodePath).
     """
 
+    raw = _stripQuotes(raw)
     matches = list(_SLASH_RUN.finditer(raw))
 
-    if not matches:
-        return (raw, "")
+    if matches:
+        last = matches[-1]
+        return (raw[:last.start()], raw[last.end():])
 
-    last = matches[-1]
-    return (raw[:last.start()], raw[last.end():])
+    lastSep = max(raw.rfind("/"), raw.rfind(os.sep))
+
+    if lastSep != -1:
+        return (raw[:lastSep], raw[lastSep + 1:])
+
+    return (raw, "")
 
 
 def _validateStem(stem: str) -> str | None:

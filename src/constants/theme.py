@@ -157,9 +157,6 @@ def _winAdapterState() -> tuple[bool, bool]:
 
     getIfEntry2 = ctypes.windll.Iphlpapi.GetIfEntry2
 
-    # A live physical link only — a present cable/radio connector (excludes
-    # virtual adapters: Hyper-V, WSL, VMware …) with media actually connected.
-    # Wi-Fi NICs report no cable connector, so they are gated on media alone.
     def physicalLink(ifIndex: int, requireConnector: bool) -> bool:
         row = MIB_IF_ROW2()
         row.InterfaceIndex = ifIndex
@@ -348,7 +345,10 @@ def getNetworkText(net_state: tuple[bool, bool, bool]) -> str:
     )
 
 
-def getMascotBanner(net_state: tuple[bool, bool, bool] = (False, False, False)) -> Table:
+def getMascotBanner(
+    net_state: tuple[bool, bool, bool] = (False, False, False),
+    colPhases: list[int] | None = None
+) -> Table:
     from rich.text import Text
 
     table = Table.grid(padding=(0, 3))
@@ -360,7 +360,13 @@ def getMascotBanner(net_state: tuple[bool, bool, bool] = (False, False, False)) 
         rowStr = "  "
         for x in range(10):
             char = MASCOT_BANNER[y][x]
-            color = MASCOT_COLORS[y][x]
+            if y in (2, 3):
+                if colPhases is not None and colPhases[x] == 0:
+                    color = bannerGradientHex(x / 9)
+                else:
+                    color = invertedGradientHex(x / 9)
+            else:
+                color = MASCOT_COLORS[y][x]
             if color:
                 rowStr += f"[{color}]{char}[/]"
             else:
@@ -371,7 +377,7 @@ def getMascotBanner(net_state: tuple[bool, bool, bool] = (False, False, False)) 
 
     right = (
         "\n"
-        f"[bold]{getGradientString('Spicebag')}[/] [{C_DIM}][italic]v{getVersion()}[/][/]\n"
+        f"[bold {C_WHITE}]Spicebag[/] [{C_DIM}][italic]v{getVersion()}[/][/]\n"
         f"[{C_WHITE}]Visual Mnemonic Encoder / Decoder[/]\n"
         f"{getNetworkText(net_state)}"
     )
@@ -466,3 +472,11 @@ def bannerGradientHex(t: float) -> str:
 
     r, g, b = colorsys.hls_to_rgb(h, light, s)
     return f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+
+
+def invertedGradientHex(t: float) -> str:
+    hexColor = bannerGradientHex(t)
+    r = 255 - int(hexColor[1:3], 16)
+    g = 255 - int(hexColor[3:5], 16)
+    b = 255 - int(hexColor[5:7], 16)
+    return f"#{r:02X}{g:02X}{b:02X}"

@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex
+from src.constants.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex, invertedGradientHex
 from dataclasses import dataclass, field
 from rich.console import Console
 from rich.cells import cell_len
@@ -219,7 +219,7 @@ def _renderChildren(
                     else:
                         for k in range(8):
                             t = (c * 8 + k) / max(1, cols * 8 - 1)
-                            rowText.append("█", style=bannerGradientHex(t))
+                            rowText.append("█", style=invertedGradientHex(t))
 
                     if child.interactive:
                         hoverSink.append((lineIdx, colStart, colStart + 8, child, wordIdx))
@@ -249,15 +249,15 @@ def _renderChildren(
 
             for wi, w in enumerate(words):
                 if wi > 0:
-                    rowText.append(" ", style=style)
-                    col += 1
+                    rowText.append(", ", style=style)
+                    col += 2
 
                 revealed = (not child.screenshotMask) and (wi == child.hoverIdx)
 
                 if revealed:
                     rowText.append(w, style=style)
                 else:
-                    rowText.append("█" * len(w), style=style)
+                    rowText.append("·" * len(w), style=style)
 
                 hoverSink.append((lineIdx, col, col + len(w), child, wi))
                 col += len(w)

@@ -126,6 +126,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodeStartTime: float = 0.0
         self._encodeFinalElapsedMs: float | None = None
 
+        # ── Mascot animation ─────────────────────────────────────────────────
+        self._mascotColPhases: list[int] = [0] * 10
+        self._mascotAnimTimer: asyncio.TimerHandle | None = None
+        self._mascotAnimActive: bool = False
+
         # ── Interactive masked-word output (decoded grid / invalid words) ────
         self._activeSeedNode: TreeNode | None = None
         self._seedRevealTimer: asyncio.TimerHandle | None = None
@@ -544,11 +549,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         resultBranch = TreeNode(kind="branch", text=header, connStyle=C_SUCC)
         seedNode = TreeNode(
             kind="seedgrid", words=list(words), cols=cols, rows=rows,
-            connStyle=C_SUCC, interactive=True, revealAll=True, hoverIdx=-1,
+            connStyle=C_DIM, interactive=True, revealAll=True, hoverIdx=-1,
         )
 
-        # The header and grid sit as siblings under the decoding node, so the
-        # whole C_SUCC connector chain runs straight down to the last word row.
+        # The header line keeps its C_SUCC connector; the grid's own row
+        # connectors revert to the neutral C_DIM tree colour.
         parent = self._encodingNode if self._encodingNode is not None else self._curStep
         if parent is not None:
             parent.children.append(resultBranch)
@@ -665,8 +670,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         from src.constants.theme import getNetworkText
 
         if self._useAltBanner:
-            self._welcome = [getMascotBanner(self._airplaneMode)]
+            self._mascotColPhases = [0] * 10
+            self._welcome = [getMascotBanner(self._airplaneMode, self._mascotColPhases)]
+            self._startMascotAnimation()
         else:
+            self._stopMascotAnimation()
             self._welcome = [
                 self._getGradientBanner(),
                 "  " + BANNER_META,
@@ -715,7 +723,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             from src.constants.theme import getNetworkText
 
             if self._useAltBanner:
-                self._welcome[0] = getMascotBanner(net_state)
+                self._welcome[0] = getMascotBanner(net_state, self._mascotColPhases)
             elif len(self._welcome) > 2:
                 self._welcome[2] = "  " + getNetworkText(net_state)
 
@@ -746,6 +754,46 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             result.append(styledLine)
 
         return "\n".join(result)
+
+
+    # ─────────────────────────── MASCOT ANIMATION ───────────────────────────
+
+    def _startMascotAnimation(self) -> None:
+        self._stopMascotAnimation()
+        self._mascotAnimActive = True
+        self._scheduleMascotStep(3.0, True, 9)
+
+    def _stopMascotAnimation(self) -> None:
+        self._mascotAnimActive = False
+        if self._mascotAnimTimer is not None:
+            self._mascotAnimTimer.cancel()
+            self._mascotAnimTimer = None
+
+    def _scheduleMascotStep(self, delay: float, toInverted: bool, col: int) -> None:
+        loop = asyncio.get_event_loop()
+        self._mascotAnimTimer = loop.call_later(delay, self._mascotStep, toInverted, col)
+
+    def _mascotStep(self, toInverted: bool, col: int) -> None:
+        if not self._mascotAnimActive:
+            return
+        self._mascotColPhases[col] = 1 if toInverted else 0
+        self._refreshMascotBanner()
+        if toInverted:
+            if col > 0:
+                self._scheduleMascotStep(0.1, True, col - 1)
+            else:
+                self._scheduleMascotStep(3.0, False, 0)
+        else:
+            if col < 9:
+                self._scheduleMascotStep(0.1, False, col + 1)
+            else:
+                self._scheduleMascotStep(3.0, True, 9)
+
+    def _refreshMascotBanner(self) -> None:
+        if not self._welcome or not self._useAltBanner:
+            return
+        self._welcome[0] = getMascotBanner(self._airplaneMode, self._mascotColPhases)
+        self._rebuild(scrollToEnd=False)
 
 
     # ───────────────────────────── TREE API ─────────────────────────────────
