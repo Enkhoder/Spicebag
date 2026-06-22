@@ -122,7 +122,7 @@ def validateImage(path) -> bool:
 
 ######## IMAGE DECODER ########
 
-def decodeImage(imagePath, salt=""):
+def decodeImage(imagePath, salt="", progressCallback=None):
     validateImage(imagePath)
 
     img = Image.open(imagePath)
@@ -170,6 +170,9 @@ def decodeImage(imagePath, salt=""):
                 maxIndex=maxIdx
             )
         )
+
+        if progressCallback is not None:
+            progressCallback((i + 1) / numWords)
 
     if numWords in (12, 15, 18, 21, 24):
         mnemonic = " ".join(BIP39_LIST[idx] for idx in wordIndices)

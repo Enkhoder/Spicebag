@@ -614,8 +614,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             return (f"[{C_WHITE}]How many images to generate? "
                     f"([bold]ENTER[/] for single-image generation)[/]")
         if state == AppState.ENCODE_WORD_COUNT:
-            return (f"[{C_WHITE}]Select seed word count. "
-                    f"({', '.join(map(str, WORD_COUNTS))})[/]")
+            return (f"[{C_WHITE}]Select seed word count.")
         if state == AppState.ENCODE_PHRASE:
             return f"[{C_WHITE}]{self._wordCount}-word seed phrase goes here.[/]"
         if state == AppState.ENCODE_SALT:
@@ -629,16 +628,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                     f"([bold]ENTER[/] for default)[/]")
         if state == AppState.ENCODE_CONFIRM:
             if self._encodeCount == 1:
-                return f"[{C_WHITE}]Proceed with generating image?[/]"
-            return f"[{C_WHITE}]Proceed with generating {self._encodeCount} images?[/]"
+                return (f"[{C_WHITE}]Proceed to generate this image?")
+            return (f"[{C_WHITE}]Proceed to generate {self._encodeCount} images?")
         if state == AppState.DECODE_PATH:
-            return f"[{C_WHITE}]Enter path to encoded image...[/]"
+            return f"[{C_WHITE}]Encoded image path and filename goes here.[/]"
         if state == AppState.DECODE_SALT:
             return (f"[{C_WHITE}]Enter image salt. "
-                    f"(highly recommended, [bold]ENTER[/] for none)[/]")
+                    f"([bold]ENTER[/] if none were given)[/]")
         if state == AppState.DECODE_CONFIRM:
-            return (f"[{C_WHITE}]Ready to decode image? "
-                    f"Press [bold]ENTER[/] to confirm or [bold]ESC[/] to step back...[/]")
+            return (f"[{C_WHITE}]Proceed to decode image?")
         if state == AppState.BANNER_CONFIRM:
             nextLabel = "mascot" if not self._useAltBanner else "ASCII"
             return (f"[{C_WHITE}]Switch to {nextLabel} banner? "
@@ -805,7 +803,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state == AppState.DECODE_PATH:
             return (
-                f"[{C_DIM}]Enter the full PNG file path, e.g., C:\\Users\\...  "
+                f"[{C_DIM}]Format: [/][{C_WHITE}]directory//filename[/][{C_DIM}], or [/]"
+                f"[{C_WHITE}]//filename[/][{C_DIM}] for the default folder  "
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
             )
 
@@ -1175,13 +1174,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._handleEncodeConfirm(value)
 
         elif self._state == AppState.DECODE_PATH:
-            if not value:
-                self._addNote(f"[{C_FAIL}]Please enter the path to the encoded image.[/]")
-                return
-            self._decodePath = value
-            self._addDashbar(C_INP)
-            self._setState(AppState.DECODE_SALT)
-            self._addStep(self._promptMarkup(AppState.DECODE_SALT))
+            self._handleDecodePath(rawValue)
 
         elif self._state == AppState.DECODE_SALT:
             self._decodeSalt = rawValue

@@ -1,6 +1,7 @@
 ######## LIBRARIES ########
 
 from src.constants.theme import C_FAIL, AppState, C_SUCC, C_DIM, C_INP, C_WHITE
+from src.app.handlers.savePath import parseDecodePath
 from src.core.decoder import decodeImage
 from rich.text import Text
 from textual import work
@@ -16,11 +17,38 @@ class DecodeHandlerMixin:
         _processing: bool
         _curStep: typing.Any
         _encodingNode: typing.Any
+        app: typing.Any
+        def _addNote(self, content: typing.Any) -> None: ...
         def _addDashbar(self, connStyle: str = ...) -> None: ...
         def _addStep(self, markup: str) -> typing.Any: ...
         def _addResult(self, text: typing.Any, connStyle: str,
                        body: typing.Any = ..., hints: typing.Any = ...) -> None: ...
         def _setState(self, state: AppState) -> None: ...
+        def _promptMarkup(self, state: AppState) -> str: ...
+        def _startLoader(self, baseMsgPlain: str) -> None: ...
+        def _stopLoader(self, warn: bool = ...) -> None: ...
+        def _stopBranchFlicker(self) -> None: ...
+        def _updateProgress(self, percent: float) -> None: ...
+
+    def _handleDecodePath(self, rawValue: str) -> None:
+        from src.constants.theme import OUTPUT_DIR
+        from pathlib import Path
+
+        defaultDir = OUTPUT_DIR / "encoded-images"
+        result = parseDecodePath(rawValue, defaultDir)
+
+        if isinstance(result, str):
+            self._addNote(Text(result, style=f"bold {C_FAIL}"))
+            return
+
+        dirStr, stem = result
+        targetDir = Path(dirStr) if dirStr else defaultDir
+        fileName = stem if stem.lower().endswith(".png") else stem + ".png"
+        self._decodePath = str(targetDir / fileName)
+        self._addDashbar(C_INP)
+        self._setState(AppState.DECODE_SALT)
+        self._addStep(self._promptMarkup(AppState.DECODE_SALT))
+
 
     def _handleDecodeConfirm(self, value: str) -> None:
         self._addDashbar(C_INP)
@@ -32,12 +60,14 @@ class DecodeHandlerMixin:
         self._processing = True
         self._encodingNode = None
 
-        # The decode result mirrors encode: a "Decoding seed image" step holding
-        # a C_SUCC "Decoded" child, or a C_FAIL child on failure.
-        self._addStep(f"[{C_WHITE}]Decoding seed image[/]")
+        # The decode result mirrors encode: a progress loader holding a C_SUCC
+        # "Decoded" child on success, or a C_FAIL child on failure. The bar
+        # advances one uniform step per word recovered (see decodeImage).
+        self._startLoader("Decoding seed image")
 
         try:
             if os.path.isdir(self._decodePath):
+                self._stopLoader(warn=True)
                 self._addResult(
                     Text("The path is a directory. Please specify a PNG image file.",
                          style=f"bold {C_FAIL}"),
@@ -55,37 +85,47 @@ class DecodeHandlerMixin:
                     raise ValueError("Decoded result is not a valid string.")
 
                 words = mnemonic.split()
+                self._stopLoader()
                 decoded = Text(f"Decoded: {len(words)} words recovered:", style=C_WHITE)
                 wordLines = [Text(f"{i:>2}.  {w}", style=C_WHITE) for i, w in enumerate(words, 1)]
                 self._addResult(decoded, C_SUCC, hints=wordLines)
 
             except ValueError as e:
+                self._stopLoader(warn=True)
                 self._addResult(Text(str(e), style=f"bold {C_FAIL}"), C_FAIL)
             except FileNotFoundError:
+                self._stopLoader(warn=True)
                 self._addResult(
                     Text("File not found. Please verify the file path and try again.",
                          style=f"bold {C_FAIL}"),
                     C_FAIL,
                 )
             except PermissionError:
+                self._stopLoader(warn=True)
                 self._addResult(
                     Text("Permission denied. Please ensure you have read access to the file.",
                          style=f"bold {C_FAIL}"),
                     C_FAIL,
                 )
             except Exception:
+                self._stopLoader(warn=True)
                 self._addResult(
                     Text("Invalid image format or failed to load pixel data.",
                          style=f"bold {C_FAIL}"),
                     C_FAIL,
                 )
         finally:
+            self._stopBranchFlicker()
             self._processing = False
             self._decodePath = ""
             self._decodeSalt = ""
+            self._encodingNode = None
             self._setState(AppState.IDLE)
 
 
     @work(thread=True, exit_on_error=False)
     def _runDecodeInThread(self, path: str, salt: str) -> str:
-        return decodeImage(path, salt=salt)
+        def p_cb(percent: float) -> None:
+            self.app.call_from_thread(self._updateProgress, percent)
+
+        return decodeImage(path, salt=salt, progressCallback=p_cb)
