@@ -92,8 +92,10 @@ def getGridDimensions(width: int, height: int):
 
 
 def extractRGB(pixel):
+    badColorSpace = ValueError("PNG contains forbidden chunks or unacceptable color space.")
+
     if not isinstance(pixel, tuple):
-        raise ValueError("Invalid pixel format.")
+        raise badColorSpace
 
     if len(pixel) == 3:
         r, g, b = pixel
@@ -102,14 +104,14 @@ def extractRGB(pixel):
         r, g, b, a = pixel
 
         if a != 255:
-            raise ValueError("Alpha channel must be fully opaque (0xFF).")
+            raise badColorSpace
 
     else:
-        raise ValueError("Unsupported color model.")
+        raise badColorSpace
 
     for v in (r, g, b):
         if type(v) is not int or not (0 <= v <= 255):
-            raise ValueError("Color channel is outside semantic 8-bit range.")
+            raise badColorSpace
 
     return (r, g, b)
 
