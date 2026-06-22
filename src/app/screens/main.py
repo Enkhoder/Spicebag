@@ -967,7 +967,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         elif self._state == AppState.DECODE_PATH:
             from src.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
-            inp.placeholder = f"{defaultStr}//"
+            inp.placeholder = f"{defaultStr}//..."
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
             if getattr(self, "_processing", False):

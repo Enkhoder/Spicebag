@@ -6,6 +6,7 @@ from src.core.decoder import decodeImage, validateImage
 from rich.text import Text
 from textual import work
 import typing
+import re
 
 ######## DECODE HANDLER MIXIN ########
 
@@ -46,7 +47,12 @@ class DecodeHandlerMixin:
         dirStr, stem = parseDecodePath(rawValue)
         targetDir = Path(dirStr) if dirStr else defaultDir
 
-        # ── No filename: the input names a directory, not an image file ─────
+        # ── Trailing separator with no filename (e.g. "<dir>//") ────────────
+        if not stem and re.search(r"[/\\]{2,}", rawValue):
+            self._addNote(Text("Please enter the image filename.", style=f"bold {C_FAIL}"))
+            return
+
+        # ── No separator: the input names a directory, not an image file ────
         if not stem:
             if self._isDir(targetDir):
                 self._addNote(Text("The path is a directory. Please specify a PNG image file.",
