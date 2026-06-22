@@ -115,15 +115,19 @@ def validateImage(path) -> bool:
             for y in range(r * cellHeight, (r + 1) * cellHeight):
                 for x in range(c * cellWidth, (c + 1) * cellWidth):
                     if extractRGB(pixels[x, y]) != baseColor:
-                        raise ValueError("Image might have been compressed.")
+                        raise ValueError(
+                            "Non-monochromatic cell(s) detected.\n"
+                            "—————> Image might have been compressed."
+                        )
 
     return True
 
 
 ######## IMAGE DECODER ########
 
-def decodeImage(imagePath, salt="", progressCallback=None):
-    validateImage(imagePath)
+def decodeImage(imagePath, salt="", progressCallback=None, validate=True):
+    if validate:
+        validateImage(imagePath)
 
     img = Image.open(imagePath)
     pixels = img.load()

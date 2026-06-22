@@ -72,6 +72,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodeFileStem = ""
         self._decodePath = ""
         self._decodeSalt = ""
+        self._decodeValidating = False
         self._readyAt = 0.0
         self._tabIndex = -1
         self._processing = False
@@ -631,9 +632,9 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 return (f"[{C_WHITE}]Proceed to generate this image?")
             return (f"[{C_WHITE}]Proceed to generate {self._encodeCount} images?")
         if state == AppState.DECODE_PATH:
-            return f"[{C_WHITE}]Encoded image path and filename goes here.[/]"
+            return f"[{C_WHITE}]Enter path to encoded image.[/]"
         if state == AppState.DECODE_SALT:
-            return (f"[{C_WHITE}]Enter image salt. "
+            return (f"[{C_WHITE}]Image salt goes here. "
                     f"([bold]ENTER[/] if none were given)[/]")
         if state == AppState.DECODE_CONFIRM:
             return (f"[{C_WHITE}]Proceed to decode image?")
@@ -766,7 +767,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
-        if self._state == AppState.ENCODE_SAVE_PATH:
+        if self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             return Text.assemble(
                 ("Type ", C_DIM),
                 ("help", Style(color=C_DIM, bold=True)),
@@ -799,13 +800,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             return (
                 f"[{C_DIM}]Press ENTER to confirm and decode or ESC to step back  "
                 + f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
-            )
-
-        if self._state == AppState.DECODE_PATH:
-            return (
-                f"[{C_DIM}]Format: [/][{C_WHITE}]directory//filename[/][{C_DIM}], or [/]"
-                f"[{C_WHITE}]//filename[/][{C_DIM}] for the default folder  "
-                f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
             )
 
         return ""
@@ -963,7 +957,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._state == AppState.IDLE:
             inp.placeholder = ""
 
-        elif self._state == AppState.ENCODE_SAVE_PATH:
+        elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             from src.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
             inp.placeholder = f"{defaultStr}"
@@ -1174,7 +1168,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._handleEncodeConfirm(value)
 
         elif self._state == AppState.DECODE_PATH:
-            self._handleDecodePath(rawValue)
+            await self._handleDecodePath(rawValue)
 
         elif self._state == AppState.DECODE_SALT:
             self._decodeSalt = rawValue
