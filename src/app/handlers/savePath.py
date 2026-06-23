@@ -22,10 +22,6 @@ def _stripQuotes(raw: str) -> str:
     return raw
 
 
-def _hasDoubleSlash(s: str) -> bool:
-    return any(s[i] in ('/', '\\') and s[i + 1] in ('/', '\\') for i in range(len(s) - 1))
-
-
 ######## SAVE PATH PARSER ########
 
 def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
@@ -47,9 +43,6 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
     if not raw:
         return ("", "")
 
-    if _hasDoubleSlash(raw):
-        return "Path contains consecutive slashes."
-
     lastSlash = max(raw.rfind('/'), raw.rfind('\\'))
 
     if lastSlash == -1:
@@ -60,17 +53,25 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
         return "Blank filename is not valid. Remove any trailing slashes."
 
     else:
-        potentialDir = raw[:lastSlash]
-        potentialStem = raw[lastSlash + 1:]
+        slashRunStart = lastSlash
+        while slashRunStart > 0 and raw[slashRunStart - 1] in ('/', '\\'):
+            slashRunStart -= 1
 
-        try:
-            if Path(raw).is_dir():
-                dirStr = raw
-                stem = ""
-            else:
+        potentialDir = raw[:slashRunStart]
+        potentialStem = raw[slashRunStart + 1:]
+
+        if slashRunStart == lastSlash:
+            try:
+                if Path(raw).is_dir():
+                    dirStr = raw
+                    stem = ""
+                else:
+                    dirStr = potentialDir
+                    stem = potentialStem
+            except OSError:
                 dirStr = potentialDir
                 stem = potentialStem
-        except OSError:
+        else:
             dirStr = potentialDir
             stem = potentialStem
 
@@ -115,7 +116,11 @@ def parseDecodePath(raw: str) -> tuple[str, str]:
     if lastSlash == -1:
         return (raw, "")
 
-    return (raw[:lastSlash], raw[lastSlash + 1:])
+    slashRunStart = lastSlash
+    while slashRunStart > 0 and raw[slashRunStart - 1] in ('/', '\\'):
+        slashRunStart -= 1
+
+    return (raw[:slashRunStart], raw[slashRunStart + 1:])
 
 
 def _validateStem(stem: str) -> str | None:

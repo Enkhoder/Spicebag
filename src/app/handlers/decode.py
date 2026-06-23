@@ -1,7 +1,7 @@
 ######## LIBRARIES ########
 
 from src.constants.theme import C_FAIL, AppState, C_INP
-from src.app.handlers.savePath import parseDecodePath, _validateStem, _hasDoubleSlash
+from src.app.handlers.savePath import parseDecodePath, _validateStem
 from src.core.decoder import decodeImage, validateImage
 from rich.text import Text
 from textual import work
@@ -53,10 +53,6 @@ class DecodeHandlerMixin:
         if (len(rawCheck) >= 2 and rawCheck[0] == rawCheck[-1]
                 and rawCheck[0] in ('"', "'")):
             rawCheck = rawCheck[1:-1]
-
-        if _hasDoubleSlash(rawCheck):
-            self._addNote(Text("Path contains consecutive slashes.", style=f"bold {C_FAIL}"))
-            return
 
         defaultDir = OUTPUT_DIR / "encoded-images"
         dirStr, stem = parseDecodePath(rawValue)
