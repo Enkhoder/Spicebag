@@ -22,6 +22,10 @@ def _stripQuotes(raw: str) -> str:
     return raw
 
 
+def _hasDoubleSlash(s: str) -> bool:
+    return any(s[i] in ('/', '\\') and s[i + 1] in ('/', '\\') for i in range(len(s) - 1))
+
+
 ######## SAVE PATH PARSER ########
 
 def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
@@ -42,6 +46,9 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
 
     if not raw:
         return ("", "")
+
+    if _hasDoubleSlash(raw):
+        return "Path contains consecutive slashes."
 
     lastSlash = max(raw.rfind('/'), raw.rfind('\\'))
 

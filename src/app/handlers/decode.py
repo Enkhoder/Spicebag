@@ -1,7 +1,7 @@
 ######## LIBRARIES ########
 
 from src.constants.theme import C_FAIL, AppState, C_INP
-from src.app.handlers.savePath import parseDecodePath, _validateStem
+from src.app.handlers.savePath import parseDecodePath, _validateStem, _hasDoubleSlash
 from src.core.decoder import decodeImage, validateImage
 from rich.text import Text
 from textual import work
@@ -49,16 +49,21 @@ class DecodeHandlerMixin:
             self._addNote(Text("Please enter an image file path.", style=f"bold {C_FAIL}"))
             return
 
+        rawCheck = rawValue.strip()
+        if (len(rawCheck) >= 2 and rawCheck[0] == rawCheck[-1]
+                and rawCheck[0] in ('"', "'")):
+            rawCheck = rawCheck[1:-1]
+
+        if _hasDoubleSlash(rawCheck):
+            self._addNote(Text("Path contains consecutive slashes.", style=f"bold {C_FAIL}"))
+            return
+
         defaultDir = OUTPUT_DIR / "encoded-images"
         dirStr, stem = parseDecodePath(rawValue)
         targetDir = Path(dirStr) if dirStr else defaultDir
 
         # ── No stem: trailing slash or bare directory name ───────────────────
         if not stem:
-            rawCheck = rawValue.strip()
-            if (len(rawCheck) >= 2 and rawCheck[0] == rawCheck[-1]
-                    and rawCheck[0] in ('"', "'")):
-                rawCheck = rawCheck[1:-1]
             if rawCheck.endswith(('/', '\\')):
                 self._addNote(Text("Please enter the image filename.", style=f"bold {C_FAIL}"))
             elif self._isDir(targetDir):
