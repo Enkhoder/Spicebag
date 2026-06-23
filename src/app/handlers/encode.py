@@ -25,6 +25,7 @@ class EncodeHandlerMixin:
         _wordCount: int
         _encodeSalt: str
         _encodePhrase: str
+        _encodeSeedType: str
         _encodeCellPx: int
         _encodeSavePath: str
         _encodeFileStem: str
@@ -122,7 +123,7 @@ class EncodeHandlerMixin:
         normalized = " ".join(value.split())
 
         try:
-            identifySeedType(normalized, expectedLength=self._wordCount)
+            _, seedType, _, _ = identifySeedType(normalized, expectedLength=self._wordCount)
         except InvalidSeedWordsError as e:
             self._addInvalidWordsNote(e.words, e.prefix)
             from src.app.widgets.secureInput import SecureInput
@@ -135,6 +136,7 @@ class EncodeHandlerMixin:
             return
 
         self._encodePhrase = normalized
+        self._encodeSeedType = seedType
         self._addDashbar(C_INP)
         self._setState(AppState.ENCODE_SALT)
         self._addStep(self._promptMarkup(AppState.ENCODE_SALT))
@@ -336,11 +338,11 @@ class EncodeHandlerMixin:
 
             if count == 1:
                 stem = self._encodeFileStem if self._encodeFileStem else f"SeedImage{wordCount}_{timestamp}"
-                filename = stem + ".png"
+                filename = stem if stem.lower().endswith(".png") else stem + ".png"
             else:
                 stem = (self._encodeFileStem if self._encodeFileStem
                         else f"SeedImages{wordCount}x{count}_{timestamp}")
-                filename = stem + ".zip"
+                filename = stem if stem.lower().endswith(".zip") else stem + ".zip"
             final_path = str(target_dir / filename)
 
             # ── Pre-flight A: directory ────────────────────────────────────────
@@ -504,6 +506,7 @@ class EncodeHandlerMixin:
         self._currentWordIdx = 0
         self._encodeSalt = ""
         self._encodePhrase = ""
+        self._encodeSeedType = ""
         self._encodeCount = 1
         self._encodeCellPx = 100
         self._encodeSavePath = ""
