@@ -69,6 +69,11 @@ class DecodeHandlerMixin:
                 self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
             return
 
+        # ── Consecutive slashes: dirStr ends with a separator ───────────────
+        if dirStr.endswith(('/', '\\')):
+            self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
+            return
+
         # ── Stem given but the full path resolves to a directory ─────────────
         if self._isDir(targetDir / stem):
             self._addNote(Text("The path is a directory. Please specify a PNG image file.",

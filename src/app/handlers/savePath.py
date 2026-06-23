@@ -116,11 +116,7 @@ def parseDecodePath(raw: str) -> tuple[str, str]:
     if lastSlash == -1:
         return (raw, "")
 
-    slashRunStart = lastSlash
-    while slashRunStart > 0 and raw[slashRunStart - 1] in ('/', '\\'):
-        slashRunStart -= 1
-
-    return (raw[:slashRunStart], raw[slashRunStart + 1:])
+    return (raw[:lastSlash], raw[lastSlash + 1:])
 
 
 def _validateStem(stem: str) -> str | None:
