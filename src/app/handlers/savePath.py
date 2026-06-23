@@ -1,8 +1,6 @@
 ######## LIBRARIES ########
 
 from pathlib import Path
-import re
-import os
 
 
 ######## CONSTANTS ########
@@ -14,8 +12,6 @@ RESERVED_NAMES = frozenset({
     "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
     "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
 })
-
-_SLASH_RUN = re.compile(r"[/\\]{2,}")
 
 
 ######## HELPERS ########
@@ -32,18 +28,11 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
     """
     Parse a combined directory + filename stem string.
 
-    Grammar:
-        ""                       -> ("", "")              all defaults
-        "<dir>"                  -> ("<dir>", "")          custom dir, default stem
-        "<sep><stem>"            -> ("", "<stem>")         default dir, custom stem
-        "<dir><sep><stem>"       -> ("<dir>", "<stem>")    both custom
+    The last path component (after the last / or \\) is the stem, unless the
+    full path already exists as a directory — in which case the path becomes
+    the save directory and the stem defaults.
 
-    <sep> = two or more consecutive characters from [/\\].
-    The LAST such run in the string is the separator.
-
-    Returns:
-        (dir_str, stem_str)  — empty string means "use default" for that field.
-        str                  — error message if the input is invalid.
+    Returns (dir_str, stem_str) or an error string.
     """
 
     if not raw:
@@ -54,19 +43,29 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
     if not raw:
         return ("", "")
 
-    matches = list(_SLASH_RUN.finditer(raw))
+    lastSlash = max(raw.rfind('/'), raw.rfind('\\'))
 
-    if not matches:
+    if lastSlash == -1:
         dirStr = raw
         stem = ""
 
-    else:
-        last = matches[-1]
-        dirStr = raw[:last.start()]
-        stem = raw[last.end():]
+    elif lastSlash == len(raw) - 1:
+        return "Blank filename is not valid. Remove any trailing slashes."
 
-        if not stem:
-            return "Blank filename is not valid. Remove any trailing slashes."
+    else:
+        potentialDir = raw[:lastSlash]
+        potentialStem = raw[lastSlash + 1:]
+
+        try:
+            if Path(raw).is_dir():
+                dirStr = raw
+                stem = ""
+            else:
+                dirStr = potentialDir
+                stem = potentialStem
+        except OSError:
+            dirStr = potentialDir
+            stem = potentialStem
 
     if stem:
         err = _validateStem(stem)
@@ -95,30 +94,21 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
 
 def parseDecodePath(raw: str) -> tuple[str, str]:
     """
-    Split a decode-path string into (directory, filename) on the LAST run of
-    two or more characters from [/\\].
+    Split a decode-path string into (directory, filename) on the last
+    path separator (/ or \\).
 
-        "<sep><stem>"        -> ("", "<stem>")       default dir, custom file
-        "<dir><sep><stem>"   -> ("<dir>", "<stem>")  both custom
-        "<dir>"              -> ("<dir>", "")        no separator: dir only
-
-    An empty filename means the input names a directory rather than a file;
-    the caller decides which error applies (see _handleDecodePath).
+        "<name>"         -> ("<name>", "")       no separator: treat as dir
+        "<dir>/<stem>"   -> ("<dir>", "<stem>")  standard split
+        "<dir>/"         -> ("<dir>", "")        trailing slash: empty stem
     """
 
     raw = _stripQuotes(raw)
-    matches = list(_SLASH_RUN.finditer(raw))
+    lastSlash = max(raw.rfind('/'), raw.rfind('\\'))
 
-    if matches:
-        last = matches[-1]
-        return (raw[:last.start()], raw[last.end():])
+    if lastSlash == -1:
+        return (raw, "")
 
-    lastSep = max(raw.rfind("/"), raw.rfind(os.sep))
-
-    if lastSep != -1:
-        return (raw[:lastSep], raw[lastSep + 1:])
-
-    return (raw, "")
+    return (raw[:lastSlash], raw[lastSlash + 1:])
 
 
 def _validateStem(stem: str) -> str | None:
@@ -144,7 +134,7 @@ def _validateStem(stem: str) -> str | None:
                 formatted.append(repr(ch).strip("'\""))
             else:
                 formatted.append(ch)
-        
+
         char_str = " ".join(formatted)
         if len(sorted_chars) > 1:
             return f"Filename contains illegal characters '{char_str}'."

@@ -6,7 +6,6 @@ from src.core.decoder import decodeImage, validateImage
 from rich.text import Text
 from textual import work
 import typing
-import re
 
 ######## DECODE HANDLER MIXIN ########
 
@@ -25,7 +24,7 @@ class DecodeHandlerMixin:
         _encodingNode: typing.Any
         _cancelFlag: bool
         app: typing.Any
-        def _showSeedGrid(self, words: list) -> None: ...
+        def _showSeedGrid(self, words: list, seedType: str = ...) -> None: ...
         def _finalizeDecodeAbort(self) -> None: ...
         def _addNote(self, content: typing.Any) -> None: ...
         def _addDashbar(self, connStyle: str = ...) -> None: ...
@@ -54,21 +53,28 @@ class DecodeHandlerMixin:
         dirStr, stem = parseDecodePath(rawValue)
         targetDir = Path(dirStr) if dirStr else defaultDir
 
-        # ── Trailing separator with no filename (e.g. "<dir>//") ────────────
-        if not stem and re.search(r"[/\\]{2,}", rawValue):
-            self._addNote(Text("Please enter the image filename.", style=f"bold {C_FAIL}"))
-            return
-
-        # ── No separator: the input names a directory, not an image file ────
+        # ── No stem: trailing slash or bare directory name ───────────────────
         if not stem:
-            if self._isDir(targetDir):
+            rawCheck = rawValue.strip()
+            if (len(rawCheck) >= 2 and rawCheck[0] == rawCheck[-1]
+                    and rawCheck[0] in ('"', "'")):
+                rawCheck = rawCheck[1:-1]
+            if rawCheck.endswith(('/', '\\')):
+                self._addNote(Text("Please enter the image filename.", style=f"bold {C_FAIL}"))
+            elif self._isDir(targetDir):
                 self._addNote(Text("The path is a directory. Please specify a PNG image file.",
                                    style=f"bold {C_FAIL}"))
             else:
                 self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
             return
 
-        # ── Filename given: directory must be valid, file must exist ────────
+        # ── Stem given but the full path resolves to a directory ─────────────
+        if self._isDir(targetDir / stem):
+            self._addNote(Text("The path is a directory. Please specify a PNG image file.",
+                               style=f"bold {C_FAIL}"))
+            return
+
+        # ── Filename given: directory must be valid, file must exist ─────────
         if not self._isDir(targetDir):
             self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
             return
@@ -193,12 +199,13 @@ class DecodeHandlerMixin:
             if worker.error is not None:
                 raise worker.error
             mnemonic = worker.result
-            if not isinstance(mnemonic, str):
+            if not isinstance(mnemonic, tuple) or len(mnemonic) != 2:
                 raise ValueError("Decoded result is not a valid string.")
+            mnemonic, seedType = mnemonic
 
             words = mnemonic.split()
             self._stopLoader()
-            self._showSeedGrid(words)
+            self._showSeedGrid(words, seedType)
 
         except InterruptedError:
             if token == self._decodeToken and not self._decodeAbortHandled:
@@ -223,7 +230,7 @@ class DecodeHandlerMixin:
 
 
     @work(thread=True, exit_on_error=False)
-    def _runDecodeInThread(self, path: str, salt: str) -> str:
+    def _runDecodeInThread(self, path: str, salt: str) -> tuple[str, str]:
         def p_cb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
         def c_check() -> bool:

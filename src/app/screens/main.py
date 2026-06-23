@@ -85,6 +85,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._currentWordIdx = 0
         self._encodeSalt = ""
         self._encodePhrase = ""
+        self._encodeSeedType = ""
         self._encodeCount = 1
         self._encodeCellPx = 100
         self._encodeSavePath = ""
@@ -541,19 +542,18 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     # ──────────────────── DECODED SEED GRID / MASKED WORDS ───────────────────
 
-    def _showSeedGrid(self, words: list[str]) -> None:
+    def _showSeedGrid(self, words: list[str], seedType: str = "") -> None:
         from src.constants.theme import GRID_SIZES
 
         cols, rows = GRID_SIZES.get(len(words), (1, len(words)))
-        header = Text(f"{len(words)} words recovered:", style=f"bold {C_SUCC}")
+        typeLabel = f" {seedType}" if seedType else ""
+        header = Text(f"{len(words)}-word{typeLabel} seed phrase recovered:", style=f"bold {C_SUCC}")
         resultBranch = TreeNode(kind="branch", text=header, connStyle=C_SUCC)
         seedNode = TreeNode(
             kind="seedgrid", words=list(words), cols=cols, rows=rows,
             connStyle=C_DIM, interactive=True, revealAll=True, hoverIdx=-1,
         )
 
-        # The header line keeps its C_SUCC connector; the grid's own row
-        # connectors revert to the neutral C_DIM tree colour.
         parent = self._encodingNode if self._encodingNode is not None else self._curStep
         if parent is not None:
             parent.children.append(resultBranch)
@@ -1034,13 +1034,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             imgH = rows * self._encodeCellPx
             saltStr = "true" if self._encodeSalt else "false"
             saltColor = C_SUCC if self._encodeSalt else C_FAIL
-            countLabel = "images" if self._encodeCount > 1 else "image"
 
             base = (
-                f"[{C_DIM}]{countLabel}: [/][{C_IMG}]{self._encodeCount}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]seed words: [/][{C_WC}]{self._wordCount}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]salt: [/][{saltColor}]{saltStr}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]size: [/][{C_INP}]{imgW}×{imgH}[/]"
+                f"[{C_DIM}]Seed type: [/][{C_IMG}]{self._encodeSeedType}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Seed words: [/][{C_WC}]{self._wordCount}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Salt: [/][{saltColor}]{saltStr}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Size: [/][{C_INP}]{imgW}×{imgH}[/]"
             )
             if getattr(self, "_processing", False):
                 return base
@@ -1052,8 +1051,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             saltColor = C_SUCC if self._decodeSalt else C_FAIL
 
             base = (
-                f"[{C_DIM}]seed words: [/][{C_WC}]{wordCount}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]salt: [/][{saltColor}]{saltStr}[/]"
+                f"[{C_DIM}]Seed words: [/][{C_WC}]{wordCount}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Salt: [/][{saltColor}]{saltStr}[/]"
             )
             if getattr(self, "_processing", False):
                 return base
@@ -1098,7 +1097,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 from src.constants.theme import OUTPUT_DIR
                 defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
                 if self._state == AppState.DECODE_PATH:
-                    defaultStr += "//"
+                    defaultStr += "/"
                 inp.value = defaultStr
                 inp.cursor_position = len(defaultStr)
                 inp.isFilled = True
@@ -1225,7 +1224,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         elif self._state == AppState.DECODE_PATH:
             from src.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
-            inp.placeholder = f"{defaultStr}//..."
+            inp.placeholder = f"{defaultStr}/..."
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
             if getattr(self, "_processing", False):
@@ -1308,10 +1307,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
             self._addAnswer("User stepped back.", C_DIM)
 
-            # Re-entering salt input (stepping out of ENCODE_CELL → ENCODE_SALT)
-            # is the only step-back that invalidates the cached colour space.
-            # Bouncing between ENCODE_CONFIRM and ENCODE_SAVE_PATH keeps it so the
-            # returning sample is byte-identical to the one shown before ESC.
             if self._state == AppState.ENCODE_CELL:
                 self._cancelPrecompute()
             elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.ENCODE_CONFIRM):
@@ -1328,6 +1323,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 self._words = []
                 self._currentWordIdx = 0
                 self._encodePhrase = ""
+                self._encodeSeedType = ""
             elif self._state == AppState.ENCODE_SALT:
                 self._encodeSalt = ""
             elif self._state == AppState.ENCODE_CELL:
@@ -1350,8 +1346,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         try:
             path = generateScreenshotPath()
 
-            # Anywhere other than the idle main menu, the shot is attached inline
-            # under the active step rather than as a standalone block.
             if self._processing or self._state != AppState.IDLE:
                 await self._executePrint(path, inline=True)
                 return
@@ -1454,8 +1448,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     async def _handleCommand(self, raw: str, executed_cmd: str | None = None) -> None:
-        # Any command following a decoded phrase permanently masks it, mirroring
-        # the interactive encode sample.
         self._maskActiveSeed()
 
         cmd = (executed_cmd if executed_cmd is not None else raw).strip().lower()
@@ -1526,18 +1518,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _showHelp(self) -> None:
-        if self._curRoot is not None:
-            self._curRoot.rawLines = [
-                Text.from_markup(f"[{C_WHITE}][bold]encode[/] — encode a seed phrase into a visual image[/]"),
-                Text.from_markup(f"[{C_WHITE}][bold]decode[/] — decode a seed phrase from an image[/]"),
-                Text.from_markup(f"[{C_WHITE}][bold]clear[/]  — clear the terminal output[/]"),
-                Text.from_markup(f"[{C_WHITE}][bold]banner[/] — toggle between banner styles[/]"),
-                Text.from_markup(f"[{C_WHITE}][bold]ESC[/]    — cancel the current operation at any time[/]"),
-                Text.from_markup(f"[{C_WHITE}][bold]exit[/]   — exit Spicebag[/]"),
-            ]
+        from src.app.screens.help import HelpScreen
+
         self._curRoot = None
         self._curStep = None
-        self._rebuild()
+        self.app.push_screen(HelpScreen())
 
 
     def _handleBannerConfirm(self) -> None:
