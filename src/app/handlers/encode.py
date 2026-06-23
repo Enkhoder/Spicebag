@@ -338,11 +338,11 @@ class EncodeHandlerMixin:
 
             if count == 1:
                 stem = self._encodeFileStem if self._encodeFileStem else f"SeedImage{wordCount}_{timestamp}"
-                filename = stem if stem.lower().endswith(".png") else stem + ".png"
+                filename = stem + ".png"
             else:
                 stem = (self._encodeFileStem if self._encodeFileStem
                         else f"SeedImages{wordCount}x{count}_{timestamp}")
-                filename = stem if stem.lower().endswith(".zip") else stem + ".zip"
+                filename = stem + ".zip"
             final_path = str(target_dir / filename)
 
             # ── Pre-flight A: directory ────────────────────────────────────────

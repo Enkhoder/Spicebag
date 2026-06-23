@@ -28,9 +28,12 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
     """
     Parse a combined directory + filename stem string.
 
-    The last path component (after the last / or \\) is the stem, unless the
-    full path already exists as a directory — in which case the path becomes
-    the save directory and the stem defaults.
+    A run of two or more consecutive separators (// \\ /\\ \\/) is an
+    explicit separator: the part before is the directory, the part after
+    is the stem — no folder-priority check.
+
+    A single separator does a folder-priority check: if the full path is
+    an existing directory the stem defaults (image saved inside).
 
     Returns (dir_str, stem_str) or an error string.
     """
@@ -58,9 +61,12 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
             slashRunStart -= 1
 
         potentialDir = raw[:slashRunStart]
-        potentialStem = raw[slashRunStart + 1:]
+        potentialStem = raw[lastSlash + 1:]
 
-        if slashRunStart == lastSlash:
+        if slashRunStart < lastSlash:
+            dirStr = potentialDir
+            stem = potentialStem
+        else:
             try:
                 if Path(raw).is_dir():
                     dirStr = raw
@@ -71,9 +77,6 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
             except OSError:
                 dirStr = potentialDir
                 stem = potentialStem
-        else:
-            dirStr = potentialDir
-            stem = potentialStem
 
     if stem:
         err = _validateStem(stem)
