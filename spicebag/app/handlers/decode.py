@@ -1,11 +1,13 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_FAIL, AppState, C_INP
-from src.app.handlers.savePath import parseDecodePath, _validateStem
-from src.core.decoder import decodeImage, validateImage
+from spicebag.constants.theme import C_FAIL, AppState, C_INP
+from spicebag.core.decoder import decodeImage, validateImage
+from spicebag.app.handlers.savePath import parseDecodePath
 from rich.text import Text
 from textual import work
 import typing
+
+
 
 ######## DECODE HANDLER MIXIN ########
 
@@ -39,7 +41,7 @@ class DecodeHandlerMixin:
         def _updateProgress(self, percent: float) -> None: ...
 
     async def _handleDecodePath(self, rawValue: str) -> None:
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
         from pathlib import Path
 
         if getattr(self, "_decodeValidating", False):
@@ -58,65 +60,56 @@ class DecodeHandlerMixin:
         dirStr, stem = parseDecodePath(rawValue)
         targetDir = Path(dirStr) if dirStr else defaultDir
 
-        # ── No stem: trailing slash or bare directory name ───────────────────
+        # No stem: trailing slash run or bare directory name
         if not stem:
-            if rawCheck.endswith(('/', '\\')):
+            if len(rawCheck) >= 2 and rawCheck[-1] in ('/', '\\') and rawCheck[-2] in ('/', '\\'):
                 self._addNote(Text("Please enter the image filename.", style=f"bold {C_FAIL}"))
+
             elif self._isDir(targetDir):
                 self._addNote(Text("The path is a directory. Please specify a PNG image file.",
                                    style=f"bold {C_FAIL}"))
+
             else:
                 self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
+
             return
 
-        # ── Consecutive slashes: dirStr ends with a separator ───────────────
-        if dirStr.endswith(('/', '\\')):
-            self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
-            return
-
-        # ── Stem given but the full path resolves to a directory ─────────────
+        # Stem given but the full path resolves to a directory
         if self._isDir(targetDir / stem):
             self._addNote(Text("The path is a directory. Please specify a PNG image file.",
                                style=f"bold {C_FAIL}"))
             return
 
-        # ── Filename given: directory must be valid, file must exist ─────────
+        # Filename given: directory must be valid, file must exist
         if not self._isDir(targetDir):
             self._addNote(Text("Directory not found.", style=f"bold {C_FAIL}"))
             return
 
-        stemErr = _validateStem(stem)
-
-        if stemErr is not None:
-            self._addNote(Text(stemErr, style=f"bold {C_FAIL}"))
-            return
-
-        if "." not in stem:
-            self._addNote(Text("File extension is missing.", style=f"bold {C_FAIL}"))
-            return
-
         if not stem.lower().endswith(".png"):
-            self._addNote(Text("Only PNG image files are supported.", style=f"bold {C_FAIL}"))
+            if "." not in stem or not stem.rsplit(".", 1)[-1]:
+                self._addNote(Text("File extension is missing.", style=f"bold {C_FAIL}"))
+
+            else:
+                self._addNote(Text("Only PNG image is supported.", style=f"bold {C_FAIL}"))
+
             return
 
         fileName = stem
         fullPath = targetDir / fileName
 
         if not self._isFile(fullPath):
-            self._addNote(Text("File not found.", style=f"bold {C_FAIL}"))
+            self._addNote(Text("Image not found.", style=f"bold {C_FAIL}"))
             return
 
-        # ── Image type / integrity (threaded — validateImage scans pixels) ──
         self._decodeValidating = True
         try:
             worker = self._validateImageInThread(str(fullPath))
             await worker.wait()
             err = worker.result
+
         finally:
             self._decodeValidating = False
 
-        # The user may have pressed ESC (cancelling to IDLE) while validation
-        # ran; only continue if we are still awaiting the path input.
         if self._state != AppState.DECODE_PATH:
             return
 
@@ -133,13 +126,15 @@ class DecodeHandlerMixin:
 
     @staticmethod
     def _readWordCount(path: str) -> int:
-        from src.core.decoder import getGridDimensions
+        from spicebag.core.decoder import getGridDimensions
         from PIL import Image
 
         try:
             with Image.open(path) as img:
                 width, height = img.size
+
             return getGridDimensions(width, height)[2]
+
         except Exception:
             return 0
 
@@ -148,6 +143,7 @@ class DecodeHandlerMixin:
     def _isDir(path) -> bool:
         try:
             return path.is_dir()
+
         except OSError:
             return False
 
@@ -156,6 +152,7 @@ class DecodeHandlerMixin:
     def _isFile(path) -> bool:
         try:
             return path.is_file()
+
         except OSError:
             return False
 
@@ -165,12 +162,16 @@ class DecodeHandlerMixin:
         try:
             validateImage(path)
             return None
+
         except FileNotFoundError:
-            return "File not found."
+            return "Image not found."
+
         except PermissionError:
-            return "Permission denied. Make sure you have read access to the file."
+            return "Permission denied. Make sure you have read access to the image."
+
         except ValueError as e:
             return str(e)
+
         except Exception:
             return "Invalid image format or failed to load pixel data."
 
@@ -189,10 +190,6 @@ class DecodeHandlerMixin:
         token = self._decodeToken
         self._encodingNode = None
 
-        # The image was already validated at the path-input stage, so the only
-        # thing left to verify here is the salt. The progress bar advances one
-        # uniform step per word recovered (see decodeImage); a wrong salt fails
-        # validation wholesale and leaves the bar at 0%.
         self._startLoader("Decoding seed image")
 
         try:
@@ -204,9 +201,11 @@ class DecodeHandlerMixin:
 
             if worker.error is not None:
                 raise worker.error
+
             mnemonic = worker.result
             if not isinstance(mnemonic, tuple) or len(mnemonic) != 2:
                 raise ValueError("Decoded result is not a valid string.")
+
             mnemonic, seedType = mnemonic
 
             words = mnemonic.split()
@@ -220,6 +219,7 @@ class DecodeHandlerMixin:
         except Exception:
             if token != self._decodeToken or self._decodeAbortHandled:
                 return
+
             self._stopLoader(warn=True)
             saltError = "Salt is incorrect." if salt else "Image is salted."
             self._addResult(Text(saltError, style=f"bold {C_FAIL}"), C_FAIL)
@@ -237,11 +237,13 @@ class DecodeHandlerMixin:
 
     @work(thread=True, exit_on_error=False)
     def _runDecodeInThread(self, path: str, salt: str) -> tuple[str, str]:
-        def p_cb(percent: float) -> None:
+        def progressCb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
-        def c_check() -> bool:
+
+
+        def cancelCheck() -> bool:
             return getattr(self, "_cancelFlag", False)
 
         return decodeImage(
-            path, salt=salt, progressCallback=p_cb, validate=False, cancelCheck=c_check
+            path, salt=salt, progressCallback=progressCb, validate=False, cancelCheck=cancelCheck
         )

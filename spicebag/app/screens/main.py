@@ -1,20 +1,20 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import (
+from spicebag.constants.theme import (
     COMMANDS, WORD_COUNTS, GRID_SIZES, BANNER_META, AppState, G_START, G_END,
     C_BG, C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
-    blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER
+    blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER, bannerHoverFrameCount
 )
 import json
 
-from src.app.handlers.screenshot import generateScreenshotPath, executePrint
-from src.app.tree import RootNode, TreeNode, renderBlocks
+from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
+from spicebag.app.tree import RootNode, TreeNode, renderBlocks
 from textual.widgets import Static, Input, RichLog, Rule
-from src.app.handlers.decode import DecodeHandlerMixin
-from src.app.handlers.encode import EncodeHandlerMixin
-from src.app.widgets.secureInput import SecureInput
+from spicebag.app.handlers.decode import DecodeHandlerMixin
+from spicebag.app.handlers.encode import EncodeHandlerMixin
+from spicebag.app.widgets.secureInput import SecureInput
 from textual.containers import Vertical, Horizontal
-from src.app.widgets.optionsBar import OptionsBar
+from spicebag.app.widgets.optionsBar import OptionsBar
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen
@@ -25,6 +25,7 @@ from rich.text import Text
 import colorsys
 import asyncio
 import time
+
 
 
 ######## CLICKABLE LOG ########
@@ -45,6 +46,7 @@ class ClickableLog(RichLog):
             sampleClick(line, col)
 
         seedClick = getattr(self.screen, "_handleSeedClick", None)
+
         if seedClick is not None:
             seedClick(line, col)
 
@@ -63,6 +65,7 @@ class ClickableLog(RichLog):
         handler = getattr(self.screen, "_clearWordHover", None)
         if handler is not None:
             handler()
+
 
 
 ######## MAIN SCREEN ########
@@ -102,10 +105,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._processing = False
         self._lastIdentifiedCommand = ""
         self._takingScreenshot = False
-        self._useAltBanner = False
+        self._useMascotBanner = True
         self._loadConfig()
 
-        # ── Conversation tree model ──────────────────────────────────────────
+        # Conversation tree model
         self._blocks: list[RootNode] = []
         self._welcome: list = []
         self._curRoot: RootNode | None = None
@@ -127,17 +130,23 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodeStartTime: float = 0.0
         self._encodeFinalElapsedMs: float | None = None
 
-        # ── Mascot animation ─────────────────────────────────────────────────
+        # Mascot animation
         self._mascotColPhases: list[int] = [0] * 10
         self._mascotAnimTimer: asyncio.TimerHandle | None = None
         self._mascotAnimActive: bool = False
 
-        # ── Interactive masked-word output (decoded grid / invalid words) ────
+        # Interactive masked-word output (decoded grid / invalid words)
         self._activeSeedNode: TreeNode | None = None
+        self._activeInvalidNodes: list[TreeNode] = []
         self._seedRevealTimer: asyncio.TimerHandle | None = None
+        self._hoverIdleTimer: asyncio.TimerHandle | None = None
         self._hoverRegions: list = []
 
-        # ── Interactive image sample ─────────────────────────────────────────
+        # Mascot hover animation
+        self._bannerHoverPhase: int = -1
+        self._bannerHoverTimer: asyncio.TimerHandle | None = None
+
+        # Interactive image sample
         self._colorSpace = None
         self._activeSampleNode: TreeNode | None = None
         self._precomputePending = False
@@ -170,7 +179,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def on_mount(self) -> None:
-        from src.constants.theme import getNetworkState
+        from spicebag.utils.networkDetect import getNetworkState
         import threading
 
         self._airplaneMode = getNetworkState()
@@ -179,36 +188,47 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._readyAt = time.time() + 0.5
         self._showWelcome()
 
-        warning_shots = getattr(self.app, "_warningScreenshots", [])
-        if warning_shots:
-            self._addWarningShotsBlock(warning_shots)
+        warningShots = getattr(self.app, "_warningScreenshots", [])
+        if warningShots:
+            self._addShotsBlock(warningShots, "during warning confirmation:")
 
         self._rebuild()
         self._updateStatusBar()
         self.query_one("#cmd-input", SecureInput).focus()
 
 
-    # ──────────────────────────── CONFIG ────────────────────────────────────
+    def on_screen_resume(self) -> None:
+        helpShots = getattr(self.app, "_helpScreenshots", [])
+        if helpShots:
+            self._attachHelpShots(helpShots)
+            setattr(self.app, "_helpScreenshots", [])
+            self._rebuild()
+
+
+
+    ######## CONFIG ########
 
     def _loadConfig(self) -> None:
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
         configPath = OUTPUT_DIR / "bannerConfig"
         if configPath.exists():
             try:
                 with open(configPath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    self._useAltBanner = data.get("useAltBanner", False)
+                    self._useMascotBanner = data.get("useMascotBanner", True)
+
             except Exception:
                 pass
 
 
     def _saveConfig(self) -> None:
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
         configPath = OUTPUT_DIR / "bannerConfig"
         try:
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             with open(configPath, "w", encoding="utf-8") as f:
-                json.dump({"useAltBanner": self._useAltBanner}, f)
+                json.dump({"useMascotBanner": self._useMascotBanner}, f)
+
         except Exception:
             pass
 
@@ -216,11 +236,13 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def watch__wordCountFlashRatio(self, value: float) -> None:
         try:
             self._updateStatusBar()
+
         except Exception:
             pass
 
 
-    # ────────────────────────── ERROR / WARN FLASH ──────────────────────────
+
+    ######## ERROR / WARN FLASH ########
 
     def _triggerInputError(self) -> None:
         inputBar = self.query_one("#input-bar")
@@ -232,6 +254,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._inputBarErrorActive:
             if self._inputErrorTimer is not None:
                 self._inputErrorTimer.cancel()
+
         else:
             self._inputBarErrorActive = True
             inputBar.add_class("input-error")
@@ -266,7 +289,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._wordCountWarnTimer = asyncio.get_event_loop().call_later(0.5, clearWarn)
 
 
-    # ─────────────────────────── PROGRESS LOADER ────────────────────────────
+
+    ######## PROGRESS LOADER ########
 
     def _progressText(self, percent: float) -> Text:
         barLen = 36
@@ -278,6 +302,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         for i in range(barLen):
             if i < totalLit:
                 out.append("━", style=gradientColor(i / max(1, barLen - 1)))
+
             else:
                 out.append("━", style=C_BG)
 
@@ -286,11 +311,13 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._encodeFinalElapsedMs is not None:
             elapsedMs = self._encodeFinalElapsedMs
             isFinal = True
+
         else:
             elapsedMs = (time.monotonic() - self._encodeStartTime) * 1000
             isFinal = False
 
         out.append("  ")
+
         out.append(f"{int(percent * 100)}%", style=pctColor)
         out.append("  ·  ", style=C_DIM)
         out.append(f"{self._formatElapsed(elapsedMs, isFinal)}", style=C_DIM)
@@ -300,14 +327,17 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def _formatElapsed(self, elapsedMs: float, isFinal: bool) -> str:
         if isFinal and elapsedMs < 1000:
             return f"{int(elapsedMs)}ms"
+
         elapsedS = elapsedMs / 1000
         h = int(elapsedS // 3600)
         m = int((elapsedS % 3600) // 60)
         s = int(elapsedS % 60)
         if h > 0:
             return f"{h}h {m}m {s}s"
+
         if m > 0:
             return f"{m}m {s}s"
+
         return f"{s}s"
 
 
@@ -323,6 +353,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._curRoot is not None:
             self._curRoot.children.append(self._encodingNode)
             self._curStep = self._encodingNode
+
         self._startBranchFlicker()
         self._rebuild()
         self._updateUI()
@@ -338,6 +369,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         now = time.monotonic()
         if now - self._lastProgressRebuild < 0.05:
             return
+
         self._lastProgressRebuild = now
         self._rebuild()
 
@@ -346,6 +378,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._stopBranchFlicker()
         if getattr(self, "_cancelFlag", False):
             return
+
         if self._encodingNode is None:
             return
 
@@ -353,6 +386,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodingNode.connStyle = C_DIM
         if not warn:
             self._encodingNode.text = self._progressText(1.0)
+
         self._rebuild()
 
 
@@ -368,6 +402,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._branchFlickerState:
             color = gradientColor(self._branchFlickerPercent)
+
         else:
             color = C_DIM
 
@@ -396,9 +431,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         inp.value = ""
         inp.isFilled = False
 
-        # Encoding tears down through its worker's finally block; decoding blocks
-        # on a key-derivation thread that cannot be interrupted, so abort its UI
-        # immediately and let the orphaned worker's result be discarded.
         if getattr(self, "_decodeInProgress", False):
             self._finalizeDecodeAbort()
 
@@ -406,6 +438,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def _finalizeDecodeAbort(self) -> None:
         if self._decodeAbortHandled:
             return
+
         self._decodeAbortHandled = True
 
         self._stopBranchFlicker()
@@ -428,40 +461,47 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             inp = self.query_one("#cmd-input", SecureInput)
             inp.value = ""
             inp.isFilled = False
+
         except Exception:
             pass
 
         self._rebuild()
 
 
-    # ─────────────────────────────── RENDER ─────────────────────────────────
+
+    ######## RENDER ########
 
     def on_resize(self, event: events.Resize) -> None:
         if self.is_mounted:
-            self._debouncedRender(event.size.width)
+            self._debouncedRender()
 
 
     @work(exclusive=True)
-    async def _debouncedRender(self, width: int) -> None:
+    async def _debouncedRender(self) -> None:
         await asyncio.sleep(0)
         if not self.is_mounted:
             return
+
         self._rebuild()
 
 
     def _logWidth(self) -> int:
         try:
             w = self.query_one("#terminal-log", RichLog).size.width
+
         except Exception:
             w = 0
+
         if w <= 0:
             w = self.app.size.width if self.app.size.width > 0 else 80
+
         return w
 
 
     def _rebuild(self, scrollToEnd: bool = True) -> None:
         try:
             log = self.query_one("#terminal-log", RichLog)
+
         except Exception:
             return
 
@@ -475,6 +515,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             for item in self._welcome:
                 if isinstance(item, str):
                     log.write(Text.from_markup(item))
+
                 else:
                     log.write(item)
 
@@ -495,6 +536,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._sampleBlockCol = blockCol
             self._sampleCols = cols
             self._sampleRows = rows
+
         else:
             self._sampleStartLine = -1
 
@@ -503,12 +545,14 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             log.scroll_end(animate=False)
 
 
-    # ──────────────────────── INTERACTIVE SAMPLE ────────────────────────────
+
+    ######## INTERACTIVE SAMPLE ########
 
     def _handleSampleClick(self, line: int, col: int) -> None:
         node = self._activeSampleNode
         if node is None or self._colorSpace is None:
             return
+
         if not node.sampleClickable or node.sampleMasked or self._sampleStartLine < 0:
             return
 
@@ -516,10 +560,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         colOff = col - self._sampleBlockCol
         if rowOff < 0 or colOff < 0:
             return
+
         if rowOff >= self._sampleRows * 3 or colOff >= self._sampleCols * 6:
             return
 
-        from src.core.generator import rerollCell
+        from spicebag.core.generator import rerollCell
 
         if not rerollCell(self._colorSpace, rowOff // 3, colOff // 6):
             return
@@ -532,6 +577,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._activeSampleNode = None
         if dropColorSpace:
             self._colorSpace = None
+
         self._sampleStartLine = -1
 
         if node is not None:
@@ -540,10 +586,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._rebuild(scrollToEnd=False)
 
 
-    # ──────────────────── DECODED SEED GRID / MASKED WORDS ───────────────────
+
+    ######## DECODED SEED GRID / MASKED WORDS ########
 
     def _showSeedGrid(self, words: list[str], seedType: str = "") -> None:
-        from src.constants.theme import GRID_SIZES
+        from spicebag.constants.theme import GRID_SIZES
 
         cols, rows = GRID_SIZES.get(len(words), (1, len(words)))
         typeLabel = f" {seedType}" if seedType else ""
@@ -567,6 +614,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def _scheduleSeedMask(self, node: TreeNode) -> None:
         if self._seedRevealTimer is not None:
             self._seedRevealTimer.cancel()
+
         self._seedRevealTimer = asyncio.get_event_loop().call_later(
             3.0, lambda: self._endSeedReveal(node)
         )
@@ -580,33 +628,54 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _addInvalidWordsNote(self, words: list[str], prefix: str = "") -> None:
+
         if self._curStep is not None:
-            self._curStep.children.append(TreeNode(
+            node = TreeNode(
                 kind="invalidnote", words=list(words), prefixMsg=prefix,
                 interactive=True, hoverIdx=-1,
-            ))
+            )
+            self._curStep.children.append(node)
+            self._activeInvalidNodes.append(node)
+
         self._rebuild()
 
 
     def _maskActiveSeed(self) -> None:
-        node = self._activeSeedNode
-        if node is None:
-            return
+        changed = False
 
-        self._activeSeedNode = None
-        if self._seedRevealTimer is not None:
-            self._seedRevealTimer.cancel()
-            self._seedRevealTimer = None
+        if self._activeSeedNode is not None:
+            self._activeSeedNode.interactive = False
+            self._activeSeedNode.revealAll = False
+            self._activeSeedNode.hoverIdx = -1
+            self._activeSeedNode = None
+            changed = True
 
-        node.interactive = False
-        node.revealAll = False
-        node.hoverIdx = -1
-        self._rebuild(scrollToEnd=False)
+        if self._maskActiveInvalidNode():
+            changed = True
+
+        if changed:
+            if self._seedRevealTimer is not None:
+                self._seedRevealTimer.cancel()
+                self._seedRevealTimer = None
+
+            self._rebuild(scrollToEnd=False)
+
+
+    def _maskActiveInvalidNode(self) -> bool:
+        if not self._activeInvalidNodes:
+            return False
+
+        for node in self._activeInvalidNodes:
+            node.interactive = False
+            node.hoverIdx = -1
+
+        self._activeInvalidNodes = []
+        return True
 
 
     def _handleSeedClick(self, line: int, col: int) -> None:
         node = self._activeSeedNode
-        if node is None or not node.interactive or node.revealAll:
+        if node is None or not node.interactive:
             return
 
         hit = any(
@@ -629,6 +698,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if id(node) not in seen:
                 seen.add(id(node))
                 nodes.append(node)
+
         return nodes
 
 
@@ -639,6 +709,33 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if line == regionLine and colStart <= col < colEnd:
                 target = (node, wordIdx)
                 break
+
+        # Reset idle timer on every movement while over a word, even if the
+        # hovered word didn't change.
+        timer = getattr(self, "_hoverIdleTimer", None)
+        if timer is not None:
+            try:
+                timer.cancel()
+
+            except Exception:
+                pass
+
+            self._hoverIdleTimer = None
+
+        if target is not None:
+            self._hoverIdleTimer = asyncio.get_event_loop().call_later(3.0, self._clearWordHover)
+
+        from spicebag.constants.theme import getVersion
+
+        versionStr = getVersion()
+        startCol = 16
+        endCol = 25 + len(versionStr)
+
+        if self._useMascotBanner and line == 1 and startCol <= col <= endCol:
+            self._setBannerHover(True)
+
+        else:
+            self._setBannerHover(False)
 
         changed = False
 
@@ -653,6 +750,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _clearWordHover(self) -> None:
+        self._setBannerHover(False)
         changed = False
 
         for node in self._uniqueHoverNodes():
@@ -664,15 +762,31 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._rebuild(scrollToEnd=False)
 
 
-    # ─────────────────────────────── WELCOME ────────────────────────────────
+    def _onAppBlur(self) -> None:
+        timer = getattr(self, "_hoverIdleTimer", None)
+        if timer is not None:
+            try:
+                timer.cancel()
+
+            except Exception:
+                pass
+
+            self._hoverIdleTimer = None
+
+        self._clearWordHover()
+
+
+
+    ######## WELCOME ########
 
     def _showWelcome(self) -> None:
-        from src.constants.theme import getNetworkText
+        from spicebag.constants.theme import getNetworkText
 
-        if self._useAltBanner:
+        if self._useMascotBanner:
             self._mascotColPhases = [0] * 10
-            self._welcome = [getMascotBanner(self._airplaneMode, self._mascotColPhases)]
+            self._welcome = [getMascotBanner(self._airplaneMode, self._mascotColPhases, self._bannerHoverPhase)]
             self._startMascotAnimation()
+
         else:
             self._stopMascotAnimation()
             self._welcome = [
@@ -683,49 +797,53 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _pollAirplaneMode(self) -> None:
-        from src.constants.theme import getNetworkState
+        from spicebag.utils.networkDetect import getNetworkState
         import sys
 
-        net_state = getNetworkState()
-        self.app.call_from_thread(self._updateAirplaneMode, net_state)
+        netState = getNetworkState()
+        self.app.call_from_thread(self._updateAirplaneMode, netState)
 
         if sys.platform == "win32":
             import ctypes
             from ctypes import wintypes
 
-            Iphlpapi = ctypes.windll.Iphlpapi
+            iphlpapi = ctypes.windll.Iphlpapi
 
             while True:
                 handle = wintypes.HANDLE()
-                Iphlpapi.NotifyAddrChange(ctypes.byref(handle), None)
-                net_state = getNetworkState()
+                iphlpapi.NotifyAddrChange(ctypes.byref(handle), None)
+                netState = getNetworkState()
                 try:
-                    self.app.call_from_thread(self._updateAirplaneMode, net_state)
+                    self.app.call_from_thread(self._updateAirplaneMode, netState)
+
                 except Exception:
                     pass
+
         else:
             while True:
                 time.sleep(2)
-                net_state = getNetworkState()
+                netState = getNetworkState()
                 try:
-                    self.app.call_from_thread(self._updateAirplaneMode, net_state)
+                    self.app.call_from_thread(self._updateAirplaneMode, netState)
+
                 except Exception:
                     pass
 
 
-    def _updateAirplaneMode(self, net_state: tuple[bool, bool, bool]) -> None:
-        if getattr(self, "_airplaneMode", None) != net_state:
-            self._airplaneMode = net_state
+    def _updateAirplaneMode(self, netState: tuple[bool, bool, bool]) -> None:
+        if getattr(self, "_airplaneMode", None) != netState:
+            self._airplaneMode = netState
 
             if not self._welcome:
                 return
 
-            from src.constants.theme import getNetworkText
+            from spicebag.constants.theme import getNetworkText
 
-            if self._useAltBanner:
-                self._welcome[0] = getMascotBanner(net_state, self._mascotColPhases)
+            if self._useMascotBanner:
+                self._welcome[0] = getMascotBanner(netState, self._mascotColPhases, self._bannerHoverPhase)
+
             elif len(self._welcome) > 2:
-                self._welcome[2] = "  " + getNetworkText(net_state)
+                self._welcome[2] = "  " + getNetworkText(netState)
 
             self._rebuild(scrollToEnd=False)
 
@@ -756,12 +874,14 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         return "\n".join(result)
 
 
-    # ─────────────────────────── MASCOT ANIMATION ───────────────────────────
+
+    ######## MASCOT ANIMATION ########
 
     def _startMascotAnimation(self) -> None:
         self._stopMascotAnimation()
         self._mascotAnimActive = True
         self._scheduleMascotStep(3.0, True, 9)
+
 
     def _stopMascotAnimation(self) -> None:
         self._mascotAnimActive = False
@@ -769,34 +889,67 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._mascotAnimTimer.cancel()
             self._mascotAnimTimer = None
 
+
     def _scheduleMascotStep(self, delay: float, toInverted: bool, col: int) -> None:
         loop = asyncio.get_event_loop()
         self._mascotAnimTimer = loop.call_later(delay, self._mascotStep, toInverted, col)
 
+
     def _mascotStep(self, toInverted: bool, col: int) -> None:
         if not self._mascotAnimActive:
             return
+
         self._mascotColPhases[col] = 1 if toInverted else 0
         self._refreshMascotBanner()
         if toInverted:
             if col > 0:
                 self._scheduleMascotStep(0.1, True, col - 1)
+
             else:
                 self._scheduleMascotStep(3.0, False, 0)
+
         else:
             if col < 9:
                 self._scheduleMascotStep(0.1, False, col + 1)
+
             else:
                 self._scheduleMascotStep(3.0, True, 9)
 
+
     def _refreshMascotBanner(self) -> None:
-        if not self._welcome or not self._useAltBanner:
+        if not self._welcome or not self._useMascotBanner:
             return
-        self._welcome[0] = getMascotBanner(self._airplaneMode, self._mascotColPhases)
+
+        self._welcome[0] = getMascotBanner(self._airplaneMode, self._mascotColPhases, self._bannerHoverPhase)
         self._rebuild(scrollToEnd=False)
 
 
-    # ───────────────────────────── TREE API ─────────────────────────────────
+    def _setBannerHover(self, hovered: bool) -> None:
+        if hovered:
+            if self._bannerHoverPhase == -1:
+                self._bannerHoverPhase = 0
+                self._refreshMascotBanner()
+                if self._bannerHoverTimer is None:
+                    self._bannerHoverTimer = asyncio.get_event_loop().call_later(0.1, self._bannerHoverTick)
+
+        else:
+            if self._bannerHoverPhase != -1:
+                self._bannerHoverPhase = -1
+                self._refreshMascotBanner()
+                if self._bannerHoverTimer is not None:
+                    self._bannerHoverTimer.cancel()
+                    self._bannerHoverTimer = None
+
+
+    def _bannerHoverTick(self) -> None:
+        if self._bannerHoverPhase != -1:
+            self._bannerHoverPhase = (self._bannerHoverPhase + 1) % bannerHoverFrameCount()
+            self._refreshMascotBanner()
+            self._bannerHoverTimer = asyncio.get_event_loop().call_later(0.05, self._bannerHoverTick)
+
+
+
+    ######## TREE API ########
 
     def _newRoot(self, label: Text, bullet: str = C_WHITE, kind: str = "command") -> RootNode:
         root = RootNode(label=label, bullet=bullet, kind=kind)
@@ -810,6 +963,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         node = TreeNode(kind="branch", text=Text.from_markup(markup), connStyle=connStyle)
         if self._curRoot is not None:
             self._curRoot.children.append(node)
+
         self._curStep = node
         self._rebuild()
         return node
@@ -820,6 +974,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._curStep.children.append(
                 TreeNode(kind="branch", text=Text(value, style=style), connStyle=connStyle)
             )
+
         self._rebuild()
 
 
@@ -830,6 +985,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._curStep.children.append(
                 TreeNode(kind="dashbar", connStyle=connStyle, barWidth=barWidth)
             )
+
         self._rebuild()
 
 
@@ -837,6 +993,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._curStep is not None:
             text = Text.from_markup(content) if isinstance(content, str) else content
             self._curStep.children.append(TreeNode(kind="note", text=text))
+
         self._rebuild()
 
 
@@ -851,6 +1008,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 kind="branch", text=t, connStyle=connStyle,
                 body=body or [], hints=hints or [],
             ))
+
         self._rebuild()
 
 
@@ -858,43 +1016,56 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if state == AppState.ENCODE_COUNT:
             return (f"[{C_WHITE}]How many images to generate? "
                     f"([bold]ENTER[/] for single-image generation)[/]")
+
         if state == AppState.ENCODE_WORD_COUNT:
             return (f"[{C_WHITE}]Select seed word count.")
+
         if state == AppState.ENCODE_PHRASE:
             return f"[{C_WHITE}]{self._wordCount}-word seed phrase goes here.[/]"
+
         if state == AppState.ENCODE_SALT:
             return (f"[{C_WHITE}]Enter image salt. "
                     f"(highly recommended, [bold]ENTER[/] for none)[/]")
+
         if state == AppState.ENCODE_CELL:
             return (f"[{C_WHITE}]Set cell size in pixels. "
                     f"([bold]ENTER[/] for default 100×100px)[/]")
+
         if state == AppState.ENCODE_SAVE_PATH:
             return (f"[{C_WHITE}]Save path and filename goes here. "
                     f"([bold]ENTER[/] for default)[/]")
+
         if state == AppState.ENCODE_CONFIRM:
             if self._encodeCount == 1:
                 return (f"[{C_WHITE}]Proceed to generate this image?")
+
             return (f"[{C_WHITE}]Proceed to generate {self._encodeCount} images?")
+
         if state == AppState.DECODE_PATH:
             return f"[{C_WHITE}]Enter path to encoded image.[/]"
+
         if state == AppState.DECODE_SALT:
             return (f"[{C_WHITE}]Image salt goes here. "
                     f"([bold]ENTER[/] if none were given)[/]")
+
         if state == AppState.DECODE_CONFIRM:
             return (f"[{C_WHITE}]Proceed to decode image?")
+
         if state == AppState.BANNER_CONFIRM:
-            nextLabel = "mascot" if not self._useAltBanner else "ASCII"
+            nextLabel = "mascot" if not self._useMascotBanner else "ASCII"
             return (f"[{C_WHITE}]Switch to {nextLabel} banner? "
                     f"Terminal contents will be cleared.[/]")
+
         return ""
 
 
-    # ───────────────────────── SCREENSHOT BLOCKS ────────────────────────────
+
+    ######## SCREENSHOT BLOCKS ########
 
     def _fileNode(self, filename: str, subdir: str) -> TreeNode:
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
         fileUri = (OUTPUT_DIR / subdir / filename).as_uri()
-        text = Text(filename, style=Style(color=C_IMG, underline=True, link=fileUri))
+        text = Text(filename, style=Style(color=C_IMG, link=fileUri))
         return TreeNode(kind="branch", text=text)
 
 
@@ -904,21 +1075,42 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._typeClearNode = None
 
 
-    def _addWarningShotsBlock(self, shots: list[str]) -> None:
+    def _addShotsBlock(self, shots: list[str], suffix: str) -> None:
         plural = "Screenshots" if len(shots) > 1 else "Screenshot"
         root = self._newRoot(
-            Text.from_markup(f"[{C_WHITE}]{plural} taken during warning confirmation:[/]"),
+            Text.from_markup(f"[{C_WHITE}]{plural} taken {suffix}[/]"),
             bullet=C_IMG, kind="screenshot",
         )
         for shot in shots:
             node = self._fileNode(shot, "app-screenshots")
             node.connStyle = C_IMG
             root.children.append(node)
+
         root.children[-1].hints = [
             Text.from_markup(f"[{C_DIM}]Type [bold]clear[/] to remove this message.[/]")
         ]
         self._typeClearNode = root.children[-1]
         self._curRoot = None
+
+
+    def _attachHelpShots(self, shots: list[str]) -> None:
+        if not self._blocks:
+            return
+
+        helpRoot = self._blocks[-1]
+        plural = "Screenshots" if len(shots) > 1 else "Screenshot"
+        header = TreeNode(
+            kind="branch",
+            text=Text.from_markup(f"[{C_WHITE}]{plural} taken in help page:[/]"),
+        )
+        for shot in shots:
+            node = self._fileNode(shot, "app-screenshots")
+            node.connStyle = C_IMG
+            header.children.append(node)
+
+        helpRoot.children.append(header)
+        self._curRoot = None
+        self._curStep = None
 
 
     def _emitScreenshotSaved(self, filename: str, inline: bool) -> None:
@@ -935,6 +1127,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if last is not None and last.kind == "shotgroup":
                 last.children.append(self._fileNode(filename, "app-screenshots"))
                 last.text = Text.from_markup(f"[{C_WHITE}]Screenshots taken and saved:[/]")
+
             else:
                 group = TreeNode(
                     kind="shotgroup",
@@ -942,6 +1135,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 )
                 group.children.append(self._fileNode(filename, "app-screenshots"))
                 step.children.append(group)
+
             self._rebuild()
             return
 
@@ -955,6 +1149,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if last is not None and last.kind == "shortcut":
             last.children.append(_objFileNode(filename))
             last.label = Text.from_markup(f"[{C_WHITE}]Screenshots taken and saved:[/]")
+
         else:
             root = self._newRoot(
                 Text.from_markup(f"[{C_WHITE}]Screenshot taken and saved:[/]"),
@@ -962,6 +1157,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             )
             root.children.append(_objFileNode(filename))
             self._curRoot = None
+
         self._rebuild()
 
 
@@ -971,11 +1167,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._rebuild()
 
 
-    # ─────────────────────────── STATUS / UI ────────────────────────────────
+
+    ######## STATUS / UI ########
 
     def _statusText(self) -> str | Text:
         if self._state == AppState.BANNER_CONFIRM:
-            currentStyle = "Spicebag mascot" if self._useAltBanner else "ASCII art"
+            currentStyle = "Spicebag mascot" if self._useMascotBanner else "ASCII art"
             return (
                 f"[{C_DIM}]Current banner style: [{C_WHITE}]{currentStyle}[/]  "
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to cancel[/]"
@@ -991,8 +1188,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             try:
                 typed = self.query_one("#cmd-input", SecureInput).value
                 n = len(typed.split()) if typed.strip() else 0
+
             except Exception:
                 n = 0
+
             nColor = blendHexColors(C_WHITE, C_FAIL, self._wordCountFlashRatio)
             return (
                 f"[{C_DIM}]Word [{nColor}]{n}[/] of {self._wordCount}  "
@@ -1043,6 +1242,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             )
             if getattr(self, "_processing", False):
                 return base
+
             return base + f"  [{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
 
         if self._state == AppState.DECODE_CONFIRM:
@@ -1056,6 +1256,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             )
             if getattr(self, "_processing", False):
                 return base
+
             return base + f"  [{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
 
         return ""
@@ -1064,6 +1265,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def _updateStatusBar(self) -> None:
         try:
             bar = self.query_one("#status-bar", OptionsBar)
+
         except Exception:
             return
 
@@ -1074,8 +1276,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._state == AppState.ENCODE_WORD_COUNT:
             try:
                 typed = self.query_one("#cmd-input", SecureInput).value.strip()
+
             except Exception:
                 typed = ""
+
             opts = [str(wc) for wc in WORD_COUNTS]
             selected = opts.index(typed) if typed in opts else -1
             suffix = Text()
@@ -1094,13 +1298,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             if not inp.value:
-                from src.constants.theme import OUTPUT_DIR
+                from spicebag.constants.theme import OUTPUT_DIR
                 defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
                 if self._state == AppState.DECODE_PATH:
-                    defaultStr += "/"
+                    defaultStr += "//"
+
                 inp.value = defaultStr
                 inp.cursor_position = len(defaultStr)
                 inp.isFilled = True
+
             return
 
         if self._state == AppState.ENCODE_WORD_COUNT:
@@ -1108,16 +1314,22 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 val = inp.value.strip()
                 if not val:
                     self._tabIndex = 0
+
                 elif val == "1":
                     self._tabIndex = WORD_COUNTS.index(12)
+
                 elif val == "2":
                     self._tabIndex = WORD_COUNTS.index(24)
+
                 elif val == "3":
                     self._tabIndex = WORD_COUNTS.index(33)
+
                 elif val.isdigit() and int(val) in WORD_COUNTS:
                     self._tabIndex = (WORD_COUNTS.index(int(val)) + 1) % len(WORD_COUNTS)
+
                 else:
                     return
+
             else:
                 self._tabIndex = (self._tabIndex + 1) % len(WORD_COUNTS)
 
@@ -1138,9 +1350,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._tabIndex != -1 and val == COMMANDS[self._tabIndex]:
             self._tabIndex = (self._tabIndex + 1) % len(COMMANDS)
+
         else:
             if self._lastIdentifiedCommand:
                 self._tabIndex = COMMANDS.index(self._lastIdentifiedCommand)
+
             else:
                 self._tabIndex = 0
 
@@ -1167,6 +1381,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._state in (AppState.ENCODE_WORD_COUNT, AppState.ENCODE_PHRASE):
             try:
                 self._updateStatusBar()
+
             except Exception:
                 pass
 
@@ -1177,8 +1392,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 inp.isFilled = False
                 try:
                     self._updateStatusBar()
+
                 except Exception:
                     pass
+
             return
 
         matches = [c for c in COMMANDS if c.startswith(typed)]
@@ -1190,6 +1407,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if typed == best:
                 inp.isFilled = True
                 self._tabIndex = COMMANDS.index(best)
+
             else:
                 inp.isFilled = False
                 self._tabIndex = -1
@@ -1217,19 +1435,20 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             inp.placeholder = ""
 
         elif self._state == AppState.ENCODE_SAVE_PATH:
-            from src.constants.theme import OUTPUT_DIR
+            from spicebag.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
             inp.placeholder = f"{defaultStr}"
 
         elif self._state == AppState.DECODE_PATH:
-            from src.constants.theme import OUTPUT_DIR
+            from spicebag.constants.theme import OUTPUT_DIR
             defaultStr = str(OUTPUT_DIR / "encoded-images").replace("\\", "/")
-            inp.placeholder = f"{defaultStr}/..."
+            inp.placeholder = f"{defaultStr}//..."
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
             if getattr(self, "_processing", False):
                 verb = "decoding" if getattr(self, "_decodeInProgress", False) else "encoding"
                 inp.placeholder = f"Type [bold]cancel[/] to abort seed image {verb}"
+
             else:
                 inp.placeholder = "Press [bold]ENTER[/] to confirm"
 
@@ -1249,10 +1468,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if state == AppState.IDLE:
             self._curRoot = None
             self._curStep = None
+
         self._updateUI()
 
 
-    # ──────────────────────────────── ESC ───────────────────────────────────
+
+    ######## ESC ########
 
     def action_cancel(self) -> None:
         if self._processing:
@@ -1263,6 +1484,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         inp = self.query_one("#cmd-input", SecureInput)
         inp.value = ""
+
         inp.isFilled = False
         inp._suggestion = ""
         self._tabIndex = -1
@@ -1307,8 +1529,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
             self._addAnswer("User stepped back.", C_DIM)
 
+            if self._state == AppState.ENCODE_PHRASE:
+                self._maskActiveInvalidNode()
+
+            elif self._state == AppState.ENCODE_SALT:
+                self._maskActiveInvalidNode()
+
             if self._state == AppState.ENCODE_CELL:
                 self._cancelPrecompute()
+
             elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.ENCODE_CONFIRM):
                 self._stopConfirmSpinner()
                 self._confirmStepNode = None
@@ -1318,16 +1547,20 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
             if self._state == AppState.ENCODE_WORD_COUNT:
                 self._encodeCount = 1
+
             elif self._state == AppState.ENCODE_PHRASE:
                 self._wordCount = 0
                 self._words = []
                 self._currentWordIdx = 0
                 self._encodePhrase = ""
                 self._encodeSeedType = ""
+
             elif self._state == AppState.ENCODE_SALT:
                 self._encodeSalt = ""
+
             elif self._state == AppState.ENCODE_CELL:
                 self._encodeCellPx = 100
+
             elif self._state in (AppState.ENCODE_SAVE_PATH, AppState.ENCODE_CONFIRM):
                 self._encodeSavePath = ""
                 self._encodeFileStem = ""
@@ -1336,7 +1569,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._addStep(self._promptMarkup(prev))
 
 
-    # ──────────────────────────── SCREENSHOTS ───────────────────────────────
+
+    ######## SCREENSHOTS ########
 
     async def action_printSvg(self) -> None:
         if getattr(self, "_takingScreenshot", False):
@@ -1354,6 +1588,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             await asyncio.sleep(0)
             await self._executePrint(path, inline=False)
             self._processing = False
+
         finally:
             self._takingScreenshot = False
 
@@ -1362,12 +1597,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         await executePrint(self, path, inline=inline)
 
 
-    # ───────────────────────────── SUBMIT ───────────────────────────────────
+
+    ######## SUBMIT ########
 
     async def on_options_bar_selected(self, event: OptionsBar.Selected) -> None:
         if self._processing or self._state not in (AppState.IDLE, AppState.ENCODE_WORD_COUNT):
             return
+
         inp = self.query_one("#cmd-input", SecureInput)
+
         inp.value = event.value
         await self.on_input_submitted(Input.Submitted(inp, event.value))
 
@@ -1395,8 +1633,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                     best = "encode" if "encode" in matches else matches[0]
                     autofilledRaw = rawValue.rstrip() + best[len(value):]
                     await self._handleCommand(autofilledRaw, best)
+
                 else:
                     await self._handleCommand(rawValue, None)
+
             else:
                 await self._handleCommand(rawValue, None)
 
@@ -1444,17 +1684,20 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if not getattr(self, "_justCleared", False):
             self._anyCommandRun = True
+
         self._justCleared = False
 
 
-    async def _handleCommand(self, raw: str, executed_cmd: str | None = None) -> None:
+    async def _handleCommand(self, raw: str, executedCmd: str | None = None) -> None:
         self._maskActiveSeed()
 
-        cmd = (executed_cmd if executed_cmd is not None else raw).strip().lower()
+        cmd = (executedCmd if executedCmd is not None else raw).strip().lower()
         display = raw.strip()
 
         if not cmd:
             return
+
+        self._clearTypeClearHint()
 
         if cmd == "clear":
             self._blocks.clear()
@@ -1474,11 +1717,13 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if cmd == "banner":
             if not self._anyCommandRun:
                 self._handleBannerConfirm()
+
             else:
                 self._newRoot(Text("banner", style=f"bold {C_INP}"))
                 self._rebuild()
                 self._addStep(self._promptMarkup(AppState.BANNER_CONFIRM))
                 self._setState(AppState.BANNER_CONFIRM)
+
             return
 
         if cmd == "exit":
@@ -1509,7 +1754,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             displayCmd = cmd[:100] + "..." if len(cmd) > 100 else cmd
             if self._curRoot is not None:
                 self._curRoot.bullet = C_FAIL
-            self._addStep(f"[bold {C_FAIL}]Unrecognized command '{displayCmd}'.[/]", connStyle=C_FAIL)
+
+            self._addStep(f"[bold {C_FAIL}]Unrecognized command: {displayCmd}[/]", connStyle=C_FAIL)
             self._curRoot = None
             self._curStep = None
             self._tabIndex = -1
@@ -1518,7 +1764,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _showHelp(self) -> None:
-        from src.app.screens.help import HelpScreen
+        from spicebag.app.screens.help import HelpScreen
 
         self._curRoot = None
         self._curStep = None
@@ -1526,7 +1772,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _handleBannerConfirm(self) -> None:
-        self._useAltBanner = not self._useAltBanner
+        self._useMascotBanner = not self._useMascotBanner
         self._saveConfig()
 
         self._blocks.clear()

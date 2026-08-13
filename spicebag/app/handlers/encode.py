@@ -1,8 +1,8 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_WHITE, C_IMG, AppState, OUTPUT_DIR
-from src.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
-from src.app.handlers.savePath import parseSavePath
+from spicebag.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_WHITE, C_IMG, AppState, OUTPUT_DIR
+from spicebag.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
+from spicebag.app.handlers.savePath import parseSavePath
 from rich.style import Style
 from rich.text import Text
 from textual import work
@@ -15,6 +15,7 @@ import os
 ######## CONSTANTS ########
 
 BRAILLE_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
 
 
 ######## ENCODE HANDLER MIXIN ########
@@ -55,6 +56,7 @@ class EncodeHandlerMixin:
         def _addDashbar(self, connStyle: str = ...) -> None: ...
         def _addNote(self, content: typing.Any) -> None: ...
         def _addInvalidWordsNote(self, words: list, prefix: str = ...) -> None: ...
+        def _maskActiveInvalidNode(self) -> bool: ...
         def _addStep(self, markup: str) -> typing.Any: ...
         def _addResult(self, text: typing.Any, connStyle: str,
                        body: typing.Any = ..., hints: typing.Any = ...) -> None: ...
@@ -71,9 +73,11 @@ class EncodeHandlerMixin:
 
         if not value:
             self._encodeCount = 1
+
         else:
             try:
                 n = int(value)
+
             except ValueError:
                 self._addNote(f"[bold {C_FAIL}]Please enter a valid number.[/]")
                 return
@@ -101,6 +105,7 @@ class EncodeHandlerMixin:
 
         try:
             count = int(value)
+
         except ValueError:
             self._addNote(f"[bold {C_FAIL}]Please enter a number.[/]")
             return
@@ -117,26 +122,29 @@ class EncodeHandlerMixin:
 
     def _handlePhrase(self, value: str) -> None:
         if not value.strip():
-            self._addNote(f"[bold {C_FAIL}]Please enter your seed phrase.[/]")
+            self._addNote(f"[bold {C_FAIL}]Please enter a seed phrase.[/]")
             return
 
         normalized = " ".join(value.split())
 
         try:
             _, seedType, _, _ = identifySeedType(normalized, expectedLength=self._wordCount)
+
         except InvalidSeedWordsError as e:
             self._addInvalidWordsNote(e.words, e.prefix)
-            from src.app.widgets.secureInput import SecureInput
+            from spicebag.app.widgets.secureInput import SecureInput
             self.query_one("#cmd-input", SecureInput).value = ""
             return
+
         except ValueError as e:
             self._addNote(Text(str(e), style=f"bold {C_FAIL}"))
-            from src.app.widgets.secureInput import SecureInput
+            from spicebag.app.widgets.secureInput import SecureInput
             self.query_one("#cmd-input", SecureInput).value = ""
             return
 
         self._encodePhrase = normalized
         self._encodeSeedType = seedType
+        self._maskActiveInvalidNode()
         self._addDashbar(C_INP)
         self._setState(AppState.ENCODE_SALT)
         self._addStep(self._promptMarkup(AppState.ENCODE_SALT))
@@ -147,9 +155,11 @@ class EncodeHandlerMixin:
 
         if not value:
             self._encodeCellPx = 100
+
         else:
             try:
                 px = int(value)
+
             except ValueError:
                 self._addNote(f"[bold {C_FAIL}]Please enter a valid integer for cell size.[/]")
                 return
@@ -169,7 +179,7 @@ class EncodeHandlerMixin:
 
 
     def _handleSavePath(self, rawValue: str) -> None:
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
 
         defaultDir = OUTPUT_DIR / "encoded-images"
         result = parseSavePath(rawValue, defaultDir)
@@ -200,10 +210,11 @@ class EncodeHandlerMixin:
 
     @work(thread=True, exit_on_error=False)
     def _precomputeWorker(self, mnemonic: str, salt: str, token: int) -> None:
-        from src.core.generator import precomputeColorSpace
+        from spicebag.core.generator import precomputeColorSpace
 
         try:
             cs = precomputeColorSpace(mnemonic, salt)
+
         except Exception:
             cs = None
 
@@ -220,6 +231,7 @@ class EncodeHandlerMixin:
             if self._state == AppState.ENCODE_CONFIRM and self._activeSampleNode is None:
                 self._stopConfirmSpinner()
                 self._rebuild(scrollToEnd=False)
+
             return
 
         self._colorSpace = cs
@@ -237,7 +249,8 @@ class EncodeHandlerMixin:
         self._confirmStepNode = None
 
 
-    # ──────────────────────── CONFIRM SAMPLE / SPINNER ──────────────────────
+
+    ######## CONFIRM SAMPLE / SPINNER ########
 
     def _enterConfirmSample(self, confirmStep) -> None:
         self._confirmStepNode = confirmStep
@@ -245,15 +258,17 @@ class EncodeHandlerMixin:
 
         if self._colorSpace is not None:
             self._attachSample(confirmStep, self._colorSpace)
+
         elif self._precomputePending:
             self._startConfirmSpinner()
+
         else:
             self._beginColorSpacePrecompute()
             self._startConfirmSpinner()
 
 
     def _attachSample(self, confirmStep, cs) -> None:
-        from src.app.tree import TreeNode
+        from spicebag.app.tree import TreeNode
 
         self._stopConfirmSpinner()
 
@@ -317,17 +332,18 @@ class EncodeHandlerMixin:
     async def _runEncode(self) -> None:
         self._processing = True
 
-        from src.constants.theme import OUTPUT_DIR
+        from spicebag.constants.theme import OUTPUT_DIR
         from pathlib import Path
 
-        final_path = ""
+        finalPath = ""
         filename = ""
 
         try:
             if self._encodeSavePath:
-                target_dir = Path(self._encodeSavePath)
+                targetDir = Path(self._encodeSavePath)
+
             else:
-                target_dir = OUTPUT_DIR / "encoded-images"
+                targetDir = OUTPUT_DIR / "encoded-images"
 
             mnemonic = self._encodePhrase
             wordCount = self._wordCount
@@ -339,59 +355,69 @@ class EncodeHandlerMixin:
             if count == 1:
                 stem = self._encodeFileStem if self._encodeFileStem else f"SeedImage{wordCount}_{timestamp}"
                 filename = stem + ".png"
+
             else:
                 stem = (self._encodeFileStem if self._encodeFileStem
                         else f"SeedImages{wordCount}x{count}_{timestamp}")
                 filename = stem + ".zip"
-            final_path = str(target_dir / filename)
 
-            # ── Pre-flight A: directory ────────────────────────────────────────
+            finalPath = str(targetDir / filename)
+
+            # Pre-flight A: directory
             try:
-                os.makedirs(target_dir, exist_ok=True)
+                os.makedirs(targetDir, exist_ok=True)
+
             except PermissionError:
                 self._addNote(f"[bold {C_FAIL}]Permission denied. Cannot create or access the target directory.[/]")
                 return
+
             except OSError as e:
                 self._addNote(Text(f"Target directory is invalid: {e}", style=f"bold {C_FAIL}"))
                 return
 
-            # ── Pre-flight B: writeability ────────────────────────────────────
+            # Pre-flight B: writeability
             try:
-                with open(final_path, "wb"):
+                with open(finalPath, "wb"):
                     pass
+
             except PermissionError:
                 self._addNote(f"[bold {C_FAIL}]Permission denied. Cannot write to the specified path.[/]")
                 return
+
             except OSError:
-                self._addNote(f"[bold {C_FAIL}]Unable to write visual image to the specified path.[/]")
+                self._addNote(f"[bold {C_FAIL}]Unable to write image to the specified path.[/]")
                 return
+
             try:
-                os.remove(final_path)
+                os.remove(finalPath)
+
             except OSError:
                 pass
 
-            # ── Progress bar + encoding ───────────────────────────────────────
+            # Progress bar + encoding
             loaderMsg = "Encoding seed image" if count == 1 else "Encoding seed images"
             self._startLoader(loaderMsg)
 
             try:
                 if count == 1 and self._colorSpace is not None:
-                    worker = self._runColorSpaceEncodeInThread(final_path, cellPx)
+                    worker = self._runColorSpaceEncodeInThread(finalPath, cellPx)
+
                 elif count == 1:
-                    worker = self._runEncodeInThread(mnemonic, final_path, cellPx, salt)
+                    worker = self._runEncodeInThread(mnemonic, finalPath, cellPx, salt)
+
                 else:
-                    worker = self._runBulkEncodeInThread(mnemonic, final_path, count, cellPx, salt)
+                    worker = self._runBulkEncodeInThread(mnemonic, finalPath, count, cellPx, salt)
 
                 await worker.wait()
 
                 if getattr(self, "_cancelFlag", False):
                     raise InterruptedError()
 
-                # ── Confirmed success — the result connector turns C_SUCC ──
-                fileUri = Path(final_path).absolute().as_uri()
+                # Confirmed success — the result connector turns C_SUCC
+                fileUri = Path(finalPath).absolute().as_uri()
                 successMsg = Text()
                 successMsg.append("Image saved: ", style=f"bold {C_SUCC}")
-                successMsg.append(filename, style=Style(color=C_IMG, underline=True, link=fileUri))
+                successMsg.append(filename, style=Style(color=C_IMG, link=fileUri))
 
                 body = []
                 if not self._shownSaltWarning:
@@ -407,8 +433,9 @@ class EncodeHandlerMixin:
 
             except InterruptedError:
                 try:
-                    if final_path and os.path.exists(final_path):
-                        os.remove(final_path)
+                    if finalPath and os.path.exists(finalPath):
+                        os.remove(finalPath)
+
                 except Exception:
                     pass
 
@@ -417,7 +444,7 @@ class EncodeHandlerMixin:
                 from textual.worker import WorkerFailed
                 inner = exc.error if isinstance(exc, WorkerFailed) else exc
                 self._addResult(
-                    Text(f"Unable to write visual image — {type(inner).__name__}: {inner}",
+                    Text(f"{type(inner).__name__}: {inner}. Unable to write image.",
                          style=f"bold {C_FAIL}"),
                     C_FAIL,
                 )
@@ -433,13 +460,15 @@ class EncodeHandlerMixin:
 
                 if self._encodingNode is not None:
                     self._encodingNode.connStyle = C_DIM
+
                 self._addResult(Text("Operation aborted.", style=f"bold {C_FAIL}"), C_FAIL)
 
                 try:
-                    from src.app.widgets.secureInput import SecureInput
+                    from spicebag.app.widgets.secureInput import SecureInput
                     inp = self.query_one("#cmd-input", SecureInput)
                     inp.value = ""
                     inp.isFilled = False
+
                 except Exception:
                     pass
 
@@ -447,11 +476,12 @@ class EncodeHandlerMixin:
                 self._processing = False
 
                 try:
-                    from src.app.widgets.secureInput import SecureInput
+                    from spicebag.app.widgets.secureInput import SecureInput
                     inp = self.query_one("#cmd-input", SecureInput)
                     if inp.value.lower() in "cancel":
                         inp.value = ""
                         inp.isFilled = False
+
                 except Exception:
                     pass
 
@@ -461,41 +491,50 @@ class EncodeHandlerMixin:
 
     @work(thread=True, exit_on_error=False)
     def _runEncodeInThread(self, mnemonic: str, path: str, cellPx: int, salt: str) -> None:
-        def p_cb(percent: float) -> None:
+        def progressCb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
-        def c_check() -> bool:
+
+
+        def cancelCheck() -> bool:
             return getattr(self, "_cancelFlag", False)
 
         try:
-            encodeMnemonic(mnemonic, path, cellPx=cellPx, salt=salt, cancelCheck=c_check, progressCallback=p_cb)
+            encodeMnemonic(mnemonic, path, cellPx=cellPx, salt=salt, cancelCheck=cancelCheck, progressCallback=progressCb)
+
         except InterruptedError:
             pass
 
 
     @work(thread=True, exit_on_error=False)
     def _runColorSpaceEncodeInThread(self, path: str, cellPx: int) -> None:
-        from src.core.generator import renderColorSpaceToFile
+        from spicebag.core.generator import renderColorSpaceToFile
 
-        def p_cb(percent: float) -> None:
+        def progressCb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
-        def c_check() -> bool:
+
+
+        def cancelCheck() -> bool:
             return getattr(self, "_cancelFlag", False)
 
         try:
-            renderColorSpaceToFile(self._colorSpace, path, cellPx=cellPx, cancelCheck=c_check, progressCallback=p_cb)
+            renderColorSpaceToFile(self._colorSpace, path, cellPx=cellPx, cancelCheck=cancelCheck, progressCallback=progressCb)
+
         except InterruptedError:
             pass
 
 
     @work(thread=True, exit_on_error=False)
     def _runBulkEncodeInThread(self, mnemonic: str, path: str, count: int, cellPx: int, salt: str) -> None:
-        def p_cb(percent: float) -> None:
+        def progressCb(percent: float) -> None:
             self.app.call_from_thread(self._updateProgress, percent)
-        def c_check() -> bool:
+
+
+        def cancelCheck() -> bool:
             return getattr(self, "_cancelFlag", False)
 
         try:
-            bulkEncodeMnemonic(mnemonic, path, count, cellPx=cellPx, salt=salt, cancelCheck=c_check, progressCallback=p_cb)
+            bulkEncodeMnemonic(mnemonic, path, count, cellPx=cellPx, salt=salt, cancelCheck=cancelCheck, progressCallback=progressCb)
+
         except InterruptedError:
             pass
 

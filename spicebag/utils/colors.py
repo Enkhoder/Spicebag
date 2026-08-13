@@ -1,10 +1,11 @@
 ######## LIBRARIES ########
 
+from spicebag.constants.defaults import PERMUTATIONS
 from argon2.low_level import hash_secret_raw, Type
-from src.constants.defaults import PERMUTATIONS
 import hashlib
 import secrets
 import hmac
+
 
 
 ######## SEED ENCODER ########
@@ -56,6 +57,7 @@ def deriveMask(maskKey: bytes, index: int, maxIndex: int) -> int:
     return int.from_bytes(digest[:4], "big") % maxIndex
 
 
+
 ######## COLOR ENCODER / DECODER ########
 
 def computeBlockSize(maxIndex: int) -> int:
@@ -65,7 +67,13 @@ def computeBlockSize(maxIndex: int) -> int:
     return 1 << blockBits
 
 
-def encodeWord(wordIndex: int, mask: int = 0, shift: tuple[int, int, int] = (0, 0, 0), maxIndex: int = 2048, offset: int = -1) -> tuple[int, int, int]:
+def encodeWord(
+    wordIndex: int,
+    mask: int = 0,
+    shift: tuple[int, int, int] = (0, 0, 0),
+    maxIndex: int = 2048,
+    offset: int = -1
+) -> tuple[int, int, int]:
     maskedIndex = wordIndex ^ (mask % maxIndex)
 
     blockSize = computeBlockSize(maxIndex)

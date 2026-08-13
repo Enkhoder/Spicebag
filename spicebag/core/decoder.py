@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.defaults import (
+from spicebag.constants.defaults import (
     BIP39_LIST,
     ELECTRUM_LIST,
     SLIP39_LIST,
@@ -9,10 +9,11 @@ from src.constants.defaults import (
     validateBIP39,
     validateElectrum
 )
-from src.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, decodeColor
+from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, decodeColor
 from PIL import Image
 import random
 import struct
+
 
 
 ######## PNG VALIDATOR ########
@@ -126,7 +127,7 @@ def validateImage(path) -> bool:
         raise ValueError("Failed to load image pixel data.")
 
     width, height = img.size
-    cols, rows, numWords, _ = getGridDimensions(width, height)
+    cols, rows, wordCount, _ = getGridDimensions(width, height)
 
     if width % cols != 0 or height % rows != 0:
         raise ValueError("Invalid cell aspect ratio.")
@@ -161,29 +162,30 @@ def validateImage(path) -> bool:
     return True
 
 
+
 ######## IMAGE DECODER ########
 
-def resolveMnemonic(wordIndices, numWords):
-    if numWords in (12, 15, 18, 21, 24):
-        mnemonic = " ".join(BIP39_LIST[idx] for idx in wordIndices)
+def resolveMnemonic(wordIndices, wordCount):
+    if wordCount in (12, 15, 18, 21, 24):
+        mnemonic = " ".join([BIP39_LIST[idx] for idx in wordIndices])
 
         if validateBIP39(mnemonic):
-            return mnemonic
+            return (mnemonic, "BIP39")
 
-    if numWords in (12, 24):
-        mnemonic = " ".join(ELECTRUM_LIST[idx] for idx in wordIndices)
+    if wordCount in (12, 24):
+        mnemonic = " ".join([ELECTRUM_LIST[idx] for idx in wordIndices])
 
         if validateElectrum(mnemonic):
-            return mnemonic
+            return (mnemonic, "Electrum")
 
-    if numWords in (20, 33):
-        mnemonic = " ".join(SLIP39_LIST[idx] for idx in wordIndices)
+    if wordCount in (20, 33):
+        mnemonic = " ".join([SLIP39_LIST[idx] for idx in wordIndices])
 
         try:
             from shamir_mnemonic import Share
             Share.from_mnemonic(mnemonic)
 
-            return mnemonic
+            return (mnemonic, "SLIP39")
 
         except Exception:
             pass
@@ -205,7 +207,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         raise ValueError("Failed to load image pixel data.")
 
     width, height = img.size
-    cols, rows, numWords, maxIdx = getGridDimensions(width, height)
+    cols, rows, wordCount, maxIdx = getGridDimensions(width, height)
 
     cellWidth = width // cols
     cellHeight = height // rows
@@ -230,7 +232,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
 
     wordIndices = []
 
-    for i in range(numWords):
+    for i in range(wordCount):
         if cancelCheck and cancelCheck():
             raise InterruptedError("Cancelled")
 
@@ -254,16 +256,18 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
     # A wrong salt yields in-range but incorrect indices, so the phrase fails
     # validation wholesale. The progress bar only advances for words that belong
     # to a successfully recovered mnemonic — a failed decode therefore stays 0%.
-    mnemonic = resolveMnemonic(wordIndices, numWords)
+    result = resolveMnemonic(wordIndices, wordCount)
 
-    if mnemonic is None:
+    if result is None:
         if progressCallback is not None:
             progressCallback(0.0)
 
         raise ValueError("Image or salt is incorrect.")
 
-    if progressCallback is not None:
-        for i in range(numWords):
-            progressCallback((i + 1) / numWords)
+    mnemonic, seedType = result
 
-    return mnemonic
+    if progressCallback is not None:
+        for i in range(wordCount):
+            progressCallback((i + 1) / wordCount)
+
+    return (mnemonic, seedType)

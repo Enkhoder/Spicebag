@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_WHITE, C_INP, C_FAIL, C_SUCC, gradientColor
+from spicebag.constants.theme import C_WHITE, C_INP, C_FAIL, C_SUCC, gradientColor
 from textual.containers import Vertical
 from textual.app import ComposeResult
 from textual.reactive import reactive
@@ -10,6 +10,7 @@ from textual import events, work
 import asyncio
 import random
 import string
+
 
 
 ######## WARNING SCREEN ########
@@ -40,6 +41,7 @@ class WarningScreen(Screen):
 
         if self._step == 0:
             line1 = f"[bold {C_WHITE}]{line1}[/]"
+
         elif self._step == 1:
             line1 = f"[{C_INP}]{line1}[/]"
 
@@ -59,10 +61,12 @@ class WarningScreen(Screen):
 
             if self._step == 1:
                 line2 = f"[bold {C_WHITE}]{line2}[/]"
+
             elif self._step == 2:
                 line2 = f"[{C_INP}]{line2}[/]"
 
             text += f"{line2}\n"
+
         else:
             text += "\n"
 
@@ -71,10 +75,12 @@ class WarningScreen(Screen):
 
             if self._step == 2:
                 line3 = f"[bold {C_WHITE}]{line3}[/]"
+
             elif self._step == 3:
                 line3 = f"[{C_INP}]{line3}[/]"
 
             text += f"{line3}\n\n"
+
         else:
             text += "\n\n"
 
@@ -85,6 +91,7 @@ class WarningScreen(Screen):
                 f"[bold {C_FAIL}]PROCEED AT YOUR OWN RISK.[/]\n"
                 f"[bold {C_FAIL}]————————————————————————————————————————————————————————————[/]"
             )
+
         else:
             text += "\n\n\n\n"
 
@@ -118,6 +125,7 @@ class WarningScreen(Screen):
         for i in range(self.BAR_SEG * 4):
             if i < totalLit:
                 res += f"[{self._gradientColors[i]}]█[/]"
+
             else:
                 res += f"[#252525]█[/]"
 
@@ -128,6 +136,7 @@ class WarningScreen(Screen):
         """Update the bar widget whenever progress changes (during animation)."""
         try:
             self.query_one("#warning-bar", Static).update(self._bar())
+
         except Exception:
             pass
 
@@ -156,12 +165,13 @@ class WarningScreen(Screen):
 
     def on_key(self, event: events.Key) -> None:
         if event.key == "ctrl+s":
-            from src.app.handlers.screenshot import generateScreenshotPath, executePrint
+            from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
             import os
             path = generateScreenshotPath()
-            
+
             if not hasattr(self.app, "_warningScreenshots"):
                 setattr(self.app, "_warningScreenshots", [])
+
             basename = os.path.basename(path + ".svg")
             shots = getattr(self.app, "_warningScreenshots")
             if basename not in shots:
@@ -184,6 +194,7 @@ class WarningScreen(Screen):
             if self._step == 4:
                 self._update()
                 self._proceed()
+
             else:
                 self._update()
 
@@ -201,5 +212,5 @@ class WarningScreen(Screen):
     @work(exclusive=True)
     async def _proceed(self) -> None:
         await asyncio.sleep(0.5)
-        from src.app.screens.main import MainScreen
+        from spicebag.app.screens.main import MainScreen
         self.app.switch_screen(MainScreen())

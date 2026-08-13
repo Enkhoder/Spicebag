@@ -1,5 +1,7 @@
-from src.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, encodeWord, computeBlockSize
-from src.constants.defaults import (
+######## LIBRARIES ########
+
+from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, encodeWord, computeBlockSize
+from spicebag.constants.defaults import (
     SEED_TYPE_STANDARDS,
     RGB_VALUE_SHIFTS
 )
@@ -26,9 +28,10 @@ class InvalidSeedWordsError(ValueError):
         masked = ", ".join("·" * len(w) for w in self.words)
 
         if prefix:
-            message = f"{prefix}, invalid seed {plural} '{masked}'."
+            message = f"{prefix}, invalid seed {plural}: {masked}"
+
         else:
-            message = f"Invalid seed {plural} '{masked}'."
+            message = f"Invalid seed {plural}: {masked}"
 
         super().__init__(message)
 
@@ -45,7 +48,7 @@ def binarySearchWord(wordList: list[str], word: str) -> int:
 def identifySeedType(rawInput: str, expectedLength: int | None = None):
     words = rawInput.lower().split()
     mnemonicStr = " ".join(words)
-    numWords = len(words)
+    wordCount = len(words)
 
     allValidWords = set()
 
@@ -62,8 +65,8 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
 
     missingMsg = ""
 
-    if expectedLength is not None and numWords < expectedLength:
-        n = expectedLength - numWords
+    if expectedLength is not None and wordCount < expectedLength:
+        n = expectedLength - wordCount
         suffix = "words" if n > 1 else "word"
         missingMsg = f"Missing {n} {suffix}"
 
@@ -79,10 +82,10 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
     elif invalidWords:
         raise InvalidSeedWordsError(invalidWords)
 
-    candidateStandards = [s for s in SEED_TYPE_STANDARDS if numWords in s[1]]
+    candidateStandards = [s for s in SEED_TYPE_STANDARDS if wordCount in s[1]]
 
     if not candidateStandards:
-        raise ValueError(f"Excessive word count: {numWords} words.")
+        raise ValueError(f"Excessive word count: {wordCount} words.")
 
     for name, _, wordList, maxIdx, validator in candidateStandards:
         wordIndices = []
@@ -103,13 +106,13 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
 
                 try:
                     Share.from_mnemonic(mnemonicStr)
-                    return wordIndices, name, numWords, maxIdx
+                    return wordIndices, name, wordCount, maxIdx
 
                 except Exception:
                     pass
 
             elif validator(mnemonicStr):
-                return wordIndices, name, numWords, maxIdx
+                return wordIndices, name, wordCount, maxIdx
 
     raise ValueError("Mnemonic checksum failed. Unrecognized or invalid seed phrase.")
 
@@ -117,14 +120,24 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
 
 ######## PNG GENERATOR ########
 
-def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, precomputedMnemonic=None, cancelCheck=None, progressCallback=None):
+def encodeMnemonic(
+    mnemonicRaw,
+    imgPath,
+    cellPx=100,
+    salt="",
+    precomputed=None,
+    precomputedMnemonic=None,
+    cancelCheck=None,
+    progressCallback=None
+):
     if precomputedMnemonic is not None:
-        indices, standard, numWords, maxIdx = precomputedMnemonic
+        indices, standard, wordCount, maxIdx = precomputedMnemonic
+
     else:
-        indices, standard, numWords, maxIdx = identifySeedType(mnemonicRaw)
+        indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
 
     if standard == "SLIP39":
-        if numWords == 20:
+        if wordCount == 20:
             cols, rows = (4, 5)
 
         else:
@@ -138,7 +151,7 @@ def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, 
             21: (3, 7),
             24: (4, 6)
         }
-        cols, rows = mapping[numWords]
+        cols, rows = mapping[wordCount]
 
     if precomputed is not None:
         maskKey, rngSeed = precomputed
@@ -164,7 +177,7 @@ def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, 
 
     blockSize = computeBlockSize(maxIdx)
     rng = random.Random(rngSeed) if rngSeed is not None else secrets.SystemRandom()
-    wordOffsets = [rng.randrange(blockSize) for _ in range(numWords)]
+    wordOffsets = [rng.randrange(blockSize) for _ in range(wordCount)]
 
     img = Image.new("RGB", (cols, rows))
     px = img.load()
@@ -172,7 +185,7 @@ def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, 
     if px is None:
         raise ValueError("Failed to initialize image pixel access.")
 
-    for i in range(numWords):
+    for i in range(wordCount):
         if cancelCheck and cancelCheck():
             raise InterruptedError("Cancelled")
 
@@ -191,7 +204,7 @@ def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, 
         px[c, r] = color
 
         if progressCallback:
-            progressCallback((i + 1) / numWords * 0.9)
+            progressCallback((i + 1) / wordCount * 0.9)
 
     if cancelCheck and cancelCheck():
         raise InterruptedError("Cancelled")
@@ -204,10 +217,10 @@ def encodeMnemonic(mnemonicRaw, imgPath, cellPx=100, salt="", precomputed=None, 
 
 
 def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelCheck=None, progressCallback=None):
-    indices, standard, numWords, maxIdx = identifySeedType(mnemonicRaw)
+    indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
 
     if standard == "SLIP39":
-        if numWords == 20:
+        if wordCount == 20:
             cols, rows = (4, 5)
 
         else:
@@ -221,7 +234,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             21: (3, 7),
             24: (4, 6)
         }
-        cols, rows = mapping[numWords]
+        cols, rows = mapping[wordCount]
 
     if salt:
         masterKey = deriveMasterKey(salt)
@@ -245,7 +258,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
     blockSize = computeBlockSize(maxIdx)
     wordOffsets = []
 
-    for _ in range(numWords):
+    for _ in range(wordCount):
         if count <= blockSize:
             wordOffsets.append(rng.sample(range(blockSize), count))
 
@@ -259,12 +272,13 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             raise InterruptedError("Cancelled")
 
         img = Image.new("RGB", (cols, rows))
+
         px = img.load()
 
         if px is None:
             raise ValueError("Failed to initialize image pixel access.")
 
-        for wIdx in range(numWords):
+        for wIdx in range(wordCount):
             wordMask = deriveMask(maskKey, wIdx, maxIdx) if maskKey is not None else 0
             currentShift = RGB_VALUE_SHIFTS[wIdx]
             offset = wordOffsets[wIdx][i]
@@ -297,6 +311,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             if progressCallback:
                 if salt:
                     progressCallback((i + 2) / (count + 1))
+
                 else:
                     progressCallback((i + 1) / count)
 
@@ -308,7 +323,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
 class ColorSpace:
     cols: int
     rows: int
-    numWords: int
+    wordCount: int
     maxIdx: int
     blockSize: int
     indices: list
@@ -319,9 +334,9 @@ class ColorSpace:
     colorRGB: dict = field(default_factory=dict)
 
 
-def gridDimensions(standard, numWords):
+def gridDimensions(standard, wordCount):
     if standard == "SLIP39":
-        return (4, 5) if numWords == 20 else (3, 11)
+        return (4, 5) if wordCount == 20 else (3, 11)
 
     mapping = {
         12: (3, 4),
@@ -331,12 +346,12 @@ def gridDimensions(standard, numWords):
         24: (4, 6)
     }
 
-    return mapping[numWords]
+    return mapping[wordCount]
 
 
 def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=None):
-    indices, standard, numWords, maxIdx = identifySeedType(mnemonicRaw)
-    cols, rows = gridDimensions(standard, numWords)
+    indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
+    cols, rows = gridDimensions(standard, wordCount)
 
     if salt:
         masterKey = deriveMasterKey(salt)
@@ -359,14 +374,14 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
         random.Random(rngSeed).shuffle(allCoords)
 
     blockSize = computeBlockSize(maxIdx)
-    masks = [deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0 for i in range(numWords)]
-    shifts = [RGB_VALUE_SHIFTS[i] for i in range(numWords)]
+    masks = [deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0 for i in range(wordCount)]
+    shifts = [RGB_VALUE_SHIFTS[i] for i in range(wordCount)]
 
-    cs = ColorSpace(cols, rows, numWords, maxIdx, blockSize, indices, masks, shifts)
+    cs = ColorSpace(cols, rows, wordCount, maxIdx, blockSize, indices, masks, shifts)
 
     rng = secrets.SystemRandom()
 
-    for i in range(numWords):
+    for i in range(wordCount):
         r, c = allCoords[i]
         cs.cellToWord[(r, c)] = i
 

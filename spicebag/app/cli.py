@@ -4,9 +4,11 @@ from typing import Optional
 import typer
 
 
+
 ######## CLI SETUP ########
 
 app = typer.Typer(invoke_without_command=True)
+
 
 
 ######## COMMANDS ########
@@ -15,8 +17,8 @@ app = typer.Typer(invoke_without_command=True)
 def main(ctx: typer.Context):
     """Spicebag: Visual Mnemonic Encoder / Decoder"""
     if ctx.invoked_subcommand is None:
-        from src.constants.theme import getVersion
-        from src.app.tui import SpicebagApp
+        from spicebag.constants.theme import getVersion
+        from spicebag.app.tui import SpicebagApp
 
         print(f"\033]0;Spicebag v{getVersion()}\007", end="", flush=True)
         tuiApp = SpicebagApp()
@@ -31,7 +33,7 @@ def encode(
     cellPx: int = typer.Option(100, help="Size of each color cell in pixels")
 ):
     """Encode a seed phrase into a color-coded PNG."""
-    from src.core.generator import encodeMnemonic
+    from spicebag.core.generator import encodeMnemonic
 
     try:
         encodeMnemonic(mnemonic, path, cellPx=cellPx, salt=salt)
@@ -49,10 +51,10 @@ def decode(
     salt: Optional[str] = typer.Option("", help="Optional salt used during encryption")
 ):
     """Decode a color-coded PNG back into a seed phrase."""
-    from src.core.decoder import decodeImage
+    from spicebag.core.decoder import decodeImage
 
     try:
-        mnemonic = decodeImage(path, salt=salt)
+        mnemonic, _ = decodeImage(path, salt=salt)
         typer.secho("\nDecoded Seed Phrase:", fg=typer.colors.GREEN)
         typer.echo(mnemonic)
 

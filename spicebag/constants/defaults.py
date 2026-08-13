@@ -5,6 +5,7 @@ from mnemonic import Mnemonic
 from pathlib import Path
 
 
+
 ######## WORDLIST INITIALIZATION ########
 
 BIP39 = Mnemonic("english")

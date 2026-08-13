@@ -11,12 +11,12 @@ if not exist .venv (
     call .venv\Scripts\activate
 )
 
-python src/utils/dependencyCheck.py
+python spicebag/utils/dependencyCheck.py
 
 if "%~1"=="" (
-    python src/app/cli.py
+    python spicebag/app/cli.py
 ) else (
-    python src/app/cli.py %*
+    python spicebag/app/cli.py %*
 )
 
 if %ERRORLEVEL% neq 0 pause

@@ -1,8 +1,8 @@
 ######## LIBRARIES ########
 
-from src.app.widgets.secureInput import SecureInput
-from src.app.screens.warning import WarningScreen
-from src.constants.theme import CLIPBOARD_KEYS, C_BG
+from spicebag.constants.theme import CLIPBOARD_KEYS, C_BG
+from spicebag.app.widgets.secureInput import SecureInput
+from spicebag.app.screens.warning import WarningScreen
 from textual.app import App
 from textual import events
 
@@ -18,6 +18,7 @@ class SpicebagApp(App):
     def get_css_variables(self) -> dict[str, str]:
         return {**super().get_css_variables(), "bg": C_BG}
 
+
     def on_mount(self) -> None:
         self.push_screen(WarningScreen())
 
@@ -30,6 +31,7 @@ class SpicebagApp(App):
 
         try:
             inp = self.screen.query_one("#cmd-input", SecureInput)
+
         except Exception:
             inp = None
 
@@ -44,6 +46,7 @@ class SpicebagApp(App):
 
         try:
             inp = self.screen.query_one("#cmd-input", SecureInput)
+
         except Exception:
             inp = None
 
@@ -62,6 +65,13 @@ class SpicebagApp(App):
     async def action_pop_screen(self) -> None:
         """Disable default screen popping on ESC key."""
         pass
+
+
+    def on_app_blur(self, event: events.AppBlur) -> None:
+        handler = getattr(self.screen, "_onAppBlur", None)
+        if handler is not None:
+            handler()
+
 
 
 ######## ENTRY POINT ########

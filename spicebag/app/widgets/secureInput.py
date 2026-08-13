@@ -1,15 +1,16 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import COMMANDS, CLIPBOARD_KEYS, AppState, blendHexColors
+from spicebag.constants.theme import COMMANDS, CLIPBOARD_KEYS, AppState, blendHexColors
 from textual.widgets.input import Selection
 from textual.reactive import reactive
 from textual.widgets import Input
-from textual.strip import Strip
 from rich.segment import Segment
+from textual.strip import Strip
 from rich.style import Style
 from rich.text import Text
 from textual import events
 import unicodedata
+
 
 
 ######## SECURE INPUT ########
@@ -38,8 +39,10 @@ class SecureInput(Input):
         if getattr(self.screen, "_processing", False):
             if stripped and "cancel".startswith(stripped):
                 self._ghost = "cancel"[len(stripped):]
+
             else:
                 self._ghost = ""
+
             return
 
         if getattr(state, "name", None) != "IDLE" or not stripped:
@@ -51,6 +54,7 @@ class SecureInput(Input):
         if matches:
             best = "encode" if "encode" in matches else matches[0]
             self._ghost = "" if stripped == best else best[len(stripped):]
+
         else:
             self._ghost = ""
 
@@ -82,12 +86,17 @@ class SecureInput(Input):
             if len(words) > remaining:
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
+
                 if hasattr(self.screen, "_triggerWordCountWarn"):
                     self.screen._triggerWordCountWarn()
+
                 words = words[:remaining]
+
             pasteText = " ".join(words)
+
             if pasteText:
                 self.insert_text_at_cursor(pasteText)
+
         else:
             if state in (AppState.ENCODE_COUNT, AppState.ENCODE_WORD_COUNT, AppState.ENCODE_CELL):
                 cleanText = "".join(c for c in pasteTextRaw if c.isdigit())
@@ -102,11 +111,13 @@ class SecureInput(Input):
 
                 if cleanText:
                     self.insert_text_at_cursor(cleanText)
+
             else:
                 if state == AppState.IDLE:
                     pasteText = pasteTextRaw.replace("\n", "").replace("\r", "")
                     if pasteText:
                         self.insert_text_at_cursor(pasteText)
+
                 else:
                     self.insert_text_at_cursor(pasteTextRaw)
 
@@ -123,6 +134,7 @@ class SecureInput(Input):
 
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
+
                 event.stop()
                 event.prevent_default()
                 return
@@ -130,6 +142,7 @@ class SecureInput(Input):
             if event.key == "escape":
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
+
                 event.stop()
                 event.prevent_default()
                 return
@@ -138,9 +151,11 @@ class SecureInput(Input):
                 if self.value.lower() == "cancel":
                     if hasattr(self.screen, "_abortProcessing"):
                         self.screen._abortProcessing()
+
                 else:
                     if hasattr(self.screen, "_triggerInputError"):
                         self.screen._triggerInputError()
+
                 event.stop()
                 event.prevent_default()
                 return
@@ -167,6 +182,7 @@ class SecureInput(Input):
             if event.key not in ("enter", "escape", "ctrl+s"):
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
+
                 event.stop()
                 event.prevent_default()
                 return
@@ -176,6 +192,7 @@ class SecureInput(Input):
                 if not event.character.isdigit():
                     if hasattr(self.screen, "_triggerInputError"):
                         self.screen._triggerInputError()
+
                     event.stop()
                     event.prevent_default()
                     return
@@ -183,6 +200,7 @@ class SecureInput(Input):
                 if event.character == "0" and self.cursor_position == 0:
                     if hasattr(self.screen, "_triggerInputError"):
                         self.screen._triggerInputError()
+
                     event.stop()
                     event.prevent_default()
                     return
@@ -198,9 +216,11 @@ class SecureInput(Input):
                     if wordsNow >= wordCount or self.value.endswith(" "):
                         if hasattr(self.screen, "_triggerInputError"):
                             self.screen._triggerInputError()
+
                         if wordsNow >= wordCount:
                             if hasattr(self.screen, "_triggerWordCountWarn"):
                                 self.screen._triggerWordCountWarn()
+
                         event.stop()
                         event.prevent_default()
                         return
@@ -209,8 +229,10 @@ class SecureInput(Input):
                     if wordsNow >= wordCount and self.value.endswith(" "):
                         if hasattr(self.screen, "_triggerInputError"):
                             self.screen._triggerInputError()
+
                         if hasattr(self.screen, "_triggerWordCountWarn"):
                             self.screen._triggerWordCountWarn()
+
                         event.stop()
                         event.prevent_default()
                         return
@@ -218,6 +240,7 @@ class SecureInput(Input):
                 else:
                     if hasattr(self.screen, "_triggerInputError"):
                         self.screen._triggerInputError()
+
                     event.stop()
                     event.prevent_default()
                     return
@@ -243,6 +266,7 @@ class SecureInput(Input):
             return strip
 
         segs[0] = Segment(" " + text[idx:], first.style, first.control)
+
         return Strip(segs)
 
 
@@ -272,10 +296,12 @@ class SecureInput(Input):
             chars = list(value)
             if len(chars) < ghostEnd:
                 chars += [" "] * (ghostEnd - len(chars))
+
             for i, g in enumerate(ghost):
                 chars[insertAt + i] = g
 
             display = Text("".join(chars), no_wrap=True, overflow="ignore", end="")
+
             display.stylize(boldStyle, 0, insertAt)
             display.stylize(ghostStyle, insertAt, ghostEnd)
             display.stylize(boldStyle, ghostEnd, len(chars))
@@ -315,6 +341,7 @@ class SecureInput(Input):
             if self._cursor_visible:
                 if len(placeholder) == 0:
                     placeholder = Text(" ", end="")
+
                 placeholder.stylize(cursorStyle, 0, 1)
 
         strip = Strip(console.render(placeholder, consoleOptions.update_width(maxWidth + 1)))

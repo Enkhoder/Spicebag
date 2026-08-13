@@ -3,6 +3,7 @@
 from pathlib import Path
 
 
+
 ######## CONSTANTS ########
 
 ILLEGAL_STEM_CHARS = frozenset('<>:"/\\|?*\x00')
@@ -14,12 +15,15 @@ RESERVED_NAMES = frozenset({
 })
 
 
+
 ######## HELPERS ########
 
 def _stripQuotes(raw: str) -> str:
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
         return raw[1:-1]
+
     return raw
+
 
 
 ######## SAVE PATH PARSER ########
@@ -53,7 +57,18 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
         stem = ""
 
     elif lastSlash == len(raw) - 1:
-        return "Blank filename is not valid. Remove any trailing slashes."
+        slashRunStart = lastSlash
+        while slashRunStart > 0 and raw[slashRunStart - 1] in ('/', '\\'):
+            slashRunStart -= 1
+
+        if slashRunStart < lastSlash:
+            return "Custom filename cannot be blank."
+
+        dirStr = raw[:lastSlash]
+        stem = ""
+
+        if not dirStr:
+            return ("", "")
 
     else:
         slashRunStart = lastSlash
@@ -66,14 +81,17 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
         if slashRunStart < lastSlash:
             dirStr = potentialDir
             stem = potentialStem
+
         else:
             try:
                 if Path(raw).is_dir():
                     dirStr = raw
                     stem = ""
+
                 else:
                     dirStr = potentialDir
                     stem = potentialStem
+
             except OSError:
                 dirStr = potentialDir
                 stem = potentialStem
@@ -89,6 +107,7 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
         isDefault = False
         try:
             isDefault = (dirPath.resolve() == defaultDir.resolve())
+
         except Exception:
             pass
 
@@ -99,6 +118,7 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
             return "Path is not a directory."
 
     return (dirStr, stem)
+
 
 
 ######## DECODE PATH PARSER ########
@@ -119,7 +139,11 @@ def parseDecodePath(raw: str) -> tuple[str, str]:
     if lastSlash == -1:
         return (raw, "")
 
-    return (raw[:lastSlash], raw[lastSlash + 1:])
+    slashRunStart = lastSlash
+    while slashRunStart > 0 and raw[slashRunStart - 1] in ('/', '\\'):
+        slashRunStart -= 1
+
+    return (raw[:slashRunStart], raw[lastSlash + 1:])
 
 
 def _validateStem(stem: str) -> str | None:
@@ -132,25 +156,28 @@ def _validateStem(stem: str) -> str | None:
     if stem[-1] in (".", " "):
         return "Filename cannot end with a period or space."
 
-    illegal_chars = set()
+    illegalChars = set()
     for ch in stem:
         if ch in ILLEGAL_STEM_CHARS or ord(ch) < 32:
-            illegal_chars.add(ch)
+            illegalChars.add(ch)
 
-    if illegal_chars:
-        sorted_chars = sorted(list(illegal_chars))
+    if illegalChars:
+        sortedChars = sorted(list(illegalChars))
         formatted = []
-        for ch in sorted_chars:
+        for ch in sortedChars:
             if ord(ch) < 32:
                 formatted.append(repr(ch).strip("'\""))
+
             else:
                 formatted.append(ch)
 
-        char_str = " ".join(formatted)
-        if len(sorted_chars) > 1:
-            return f"Filename contains illegal characters '{char_str}'."
+        charStr = " ".join(formatted)
+
+        if len(sortedChars) > 1:
+            return f"Filename contains illegal characters: {charStr}"
+
         else:
-            return f"Filename contains an illegal character '{char_str}'."
+            return f"Filename contains an illegal character: {charStr}"
 
     baseName = stem.upper().rsplit(".", 1)[0]
 

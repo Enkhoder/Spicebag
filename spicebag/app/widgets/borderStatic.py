@@ -3,6 +3,7 @@
 from textual.widgets import Static
 
 
+
 ######## BORDER STATIC ########
 
 class BorderStatic(Static):

@@ -1,11 +1,12 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex, invertedGradientHex
+from spicebag.constants.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex, invertedGradientHex
 from dataclasses import dataclass, field
 from rich.console import Console
 from rich.cells import cell_len
 from rich.text import Text
 import typing
+
 
 
 ######## TREE MODEL ########
@@ -23,7 +24,7 @@ class TreeNode:
     sampleMasked: bool = False
     sampleClickable: bool = False
 
-    # ── Interactive masked-word nodes (seedgrid / invalidnote) ───────────────
+    # Interactive masked-word nodes (seedgrid / invalidnote)
     words: list[str] = field(default_factory=list)
     cols: int = 0
     rows: int = 0
@@ -43,6 +44,7 @@ class RootNode:
     kind: str = "command"
 
 
+
 ######## RENDERER ########
 
 def _mkText(segments: list[tuple[str, str | None]]) -> Text:
@@ -50,6 +52,7 @@ def _mkText(segments: list[tuple[str, str | None]]) -> Text:
     t = Text(no_wrap=True, end="")
     for s, style in segments:
         t.append(s, style=style)
+
     return t
 
 
@@ -71,6 +74,7 @@ def _emitWrapped(
 
     if text.plain:
         lines = text.wrap(console, avail)
+
     else:
         lines = [Text("")]
 
@@ -89,6 +93,7 @@ def _appendSampleRow(rowText: Text, cs, cellR: int, masked: bool) -> None:
         totalCols = cs.cols * 6
         for x in range(totalCols):
             rowText.append("█", style=bannerGradientHex(x / max(1, totalCols - 1)))
+
     else:
         for c in range(cs.cols):
             r, g, b = cs.colorRGB[(cellR, c)]
@@ -127,12 +132,14 @@ def _renderChildren(
                     barText,
                     width, console,
                 )
+
             else:
                 connSeg = [(connChar + "── ", child.connStyle)]
                 _emitWrapped(out, prefix + connSeg, prefix + ext, child.text, width, console)
 
                 for bodyLine in child.body:
                     _emitWrapped(out, prefix + ext, prefix + ext, bodyLine, width, console)
+
                 for hintLine in child.hints:
                     hintPrefix = prefix + ext
                     _emitWrapped(out, hintPrefix, hintPrefix, hintLine, width, console)
@@ -146,6 +153,7 @@ def _renderChildren(
                 out.append(_mkText(prefix + [("│", C_DIM)]))
 
         elif child.kind == "imagesample":
+
             isLast = (i == lastIdx)
             cs = child.sampleSpace
 
@@ -159,8 +167,10 @@ def _renderChildren(
             for k in range(totalLines):
                 if k == 0:
                     conn = [("├── ", child.connStyle)]
+
                 elif k == totalLines - 1:
                     conn = [(("└── " if isLast else "├── "), child.connStyle)]
+
                 else:
                     conn = [("│   ", C_DIM)]
 
@@ -172,6 +182,7 @@ def _renderChildren(
                 out.append(_mkText(prefix + [("│", C_DIM)]))
 
         elif child.kind == "seedgrid":
+
             isLast = (i == lastIdx)
             cols = child.cols
             rows = child.rows
@@ -182,8 +193,10 @@ def _renderChildren(
             for r in range(rows):
                 if r == 0:
                     conn = [("├── ", child.connStyle)]
+
                 elif r == rows - 1:
                     conn = [(("└── " if isLast else "├── "), child.connStyle)]
+
                 else:
                     conn = [("│   ", child.connStyle)]
 
@@ -202,10 +215,10 @@ def _renderChildren(
                         rowText.append("  ")
 
                     rowText.append(f"{wordIdx + 1:>2}", style=C_DIM)
-                    rowText.append(". ", style=C_DIM)
+                    rowText.append(" ", style=C_DIM)
 
                     word = words[wordIdx]
-                    colStart = baseCol + c * 14 + 4
+                    colStart = baseCol + c * 13 + 3
                     revealed = (
                         not child.screenshotMask and child.interactive
                         and (child.revealAll or wordIdx == child.hoverIdx)
@@ -216,6 +229,7 @@ def _renderChildren(
                         pad = 8 - cell_len(word)
                         if pad > 0:
                             rowText.append(" " * pad)
+
                     else:
                         for k in range(8):
                             t = (c * 8 + k) / max(1, cols * 8 - 1)
@@ -231,6 +245,7 @@ def _renderChildren(
 
         elif child.kind == "invalidnote":
             notePrefix = prefix + [("│", C_DIM), (" ", None)]
+
             baseCol = _prefixWidth(notePrefix)
             rowText = _mkText(notePrefix)
             lineIdx = len(out)
@@ -240,9 +255,10 @@ def _renderChildren(
             plural = "words" if len(words) > 1 else "word"
 
             if child.prefixMsg:
-                head = f"{child.prefixMsg}, invalid seed {plural} '"
+                head = f"{child.prefixMsg}, invalid seed {plural}: "
+
             else:
-                head = f"Invalid seed {plural} '"
+                head = f"Invalid seed {plural}: "
 
             rowText.append(head, style=style)
             col = baseCol + cell_len(head)
@@ -256,13 +272,15 @@ def _renderChildren(
 
                 if revealed:
                     rowText.append(w, style=style)
+
                 else:
                     rowText.append("·" * len(w), style=style)
 
-                hoverSink.append((lineIdx, col, col + len(w), child, wi))
+                if child.interactive:
+                    hoverSink.append((lineIdx, col, col + len(w), child, wi))
+
                 col += len(w)
 
-            rowText.append("'.", style=style)
             out.append(rowText)
 
         elif child.kind == "note":
@@ -299,14 +317,17 @@ def renderBlocks(blocks: list[RootNode], width: int, console: Console) -> tuple[
         bulletPrefix: list[tuple[str, str | None]] = [("●", root.bullet), (" ", None)]
         if root.children:
             labelCont: list[tuple[str, str | None]] = [("│", root.children[0].connStyle), (" ", None)]
+
         else:
             labelCont = [("  ", None)]
+
         _emitWrapped(out, bulletPrefix, labelCont, root.label, width, console)
 
         if root.rawLines is not None:
             out.append(Text(""))
             for raw in root.rawLines:
                 _emitWrapped(out, [("  ", None)], [("  ", None)], raw, width, console)
+
             continue
 
         _renderChildren(

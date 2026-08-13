@@ -40,6 +40,23 @@ Screen {
 }
 
 
+/******* HELP SCREEN *******/
+
+#help-container {
+    height: 100%;
+    width: 100%;
+    align: center top;
+    overflow-y: auto;
+    scrollbar-size: 0 0;
+    padding: 1 0;
+}
+
+#help-body {
+    width: auto;
+    height: auto;
+}
+
+
 /******* APP CONTAINER *******/
 
 #app-container {

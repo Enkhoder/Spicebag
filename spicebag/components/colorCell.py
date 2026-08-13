@@ -4,6 +4,7 @@ from textual.widgets import Static
 from textual.events import Click
 
 
+
 ######## COLOR CELL ########
 
 class ColorCell(Static):

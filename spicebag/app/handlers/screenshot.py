@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from src.constants.theme import OUTPUT_DIR
+from spicebag.constants.theme import OUTPUT_DIR
 from textual.screen import Screen
 from textual.app import App
 import time
@@ -94,25 +94,26 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     if os.path.exists(path + ".svg"):
         if hasattr(screen, "_triggerInputError"):
             screen._triggerInputError()
+
         return
 
     state = getattr(screen, "_state", None)
     inp = None
-    old_value = ""
-    old_placeholder = ""
-    should_restore = False
+    oldValue = ""
+    oldPlaceholder = ""
+    shouldRestore = False
 
-    state_name = getattr(state, "name", "")
+    stateName = getattr(state, "name", "")
 
-    if state_name in ("ENCODE_PHRASE", "ENCODE_SALT", "DECODE_SALT", "DECODE_PATH", "ENCODE_SAVE_PATH"):
+    if stateName in ("ENCODE_PHRASE", "ENCODE_SALT", "DECODE_SALT", "DECODE_PATH", "ENCODE_SAVE_PATH"):
         try:
-            from src.app.widgets.secureInput import SecureInput
+            from spicebag.app.widgets.secureInput import SecureInput
             inp = screen.query_one("#cmd-input", SecureInput)
-            old_value = inp.value
-            old_placeholder = inp.placeholder
+            oldValue = inp.value
+            oldPlaceholder = inp.placeholder
             inp.value = ""
             inp.placeholder = ""
-            should_restore = True
+            shouldRestore = True
 
         except Exception:
             pass
@@ -132,6 +133,9 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     seen = set()
     for region in getattr(screen, "_hoverRegions", []):
         node = region[3]
+        if not hasattr(node, "screenshotMask"):
+            continue
+
         if id(node) not in seen:
             seen.add(id(node))
             if not node.screenshotMask:
@@ -145,14 +149,18 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     try:
         try:
             svg = screen.app.export_screenshot()
+
         finally:
-            if should_restore and inp:
-                inp.value = old_value
-                inp.placeholder = old_placeholder
+            if shouldRestore and inp:
+                inp.value = oldValue
+                inp.placeholder = oldPlaceholder
+
             if maskSample and sampleNode is not None:
                 sampleNode.sampleMasked = False
+
             for node in textNodes:
                 node.screenshotMask = False
+
             if (maskSample or textNodes) and _rebuild:
                 _rebuild(scrollToEnd=False)
 
@@ -182,6 +190,6 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
 
 
 def generateScreenshotPath() -> str:
-    target_dir = OUTPUT_DIR / "app-screenshots"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    return str(target_dir / f"Screenshot_{time.strftime('%Y%m%d_%H%M%S')}")
+    targetDir = OUTPUT_DIR / "app-screenshots"
+    targetDir.mkdir(parents=True, exist_ok=True)
+    return str(targetDir / f"Screenshot_{time.strftime('%Y%m%d_%H%M%S')}")
