@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spicebag"
+version = "1.0.0"
+description = "Visual Mnemonic Encoder / Decoder — encode wallet seed phrases into color-coded PNG images"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "E14118" }]
+keywords = ["mnemonic", "bip39", "slip39", "electrum", "seed-phrase", "steganography", "tui"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Utilities"
+]
+dependencies = [
+    "typer",
+    "rich",
+    "textual",
+    "pillow",
+    "mnemonic",
+    "shamir-mnemonic",
+    "argon2-cffi"
+]
+
+[project.urls]
+Homepage = "https://github.com/E14118/Spicebag"
+Repository = "https://github.com/E14118/Spicebag"
+Issues = "https://github.com/E14118/Spicebag/issues"
+
+[project.scripts]
+spicebag = "spicebag.app.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["spicebag*"]
+
+[tool.setuptools.package-data]
+"spicebag.app" = ["*.tcss"]
+"spicebag.constants" = ["*.txt"]

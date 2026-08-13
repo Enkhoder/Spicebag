@@ -34,6 +34,58 @@ Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images 
 
 ---
 
+## Configuration Space
+
+How many visually distinct images can encode the *same* seed phrase under the *same* salt?
+
+Once the salt is fixed, almost everything is deterministic:
+
+| Component | Source | Free? |
+|-----------|--------|-------|
+| Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed — one layout per salt |
+| XOR mask | `deriveMask(maskKey, wordPosition, maxIdx)` | ❌ Fixed |
+| Channel shift | `RGB_VALUE_SHIFTS[wordPosition]` | ❌ Fixed |
+| Channel permutation | Selected by `(R+G+B) % 6` | ❌ Derived |
+| **Block offset** | `secrets.randbelow(blockSize)` | ✅ **Free** |
+
+The block offset is the only free variable. It occupies the low bits of the 24-bit value left over after the word
+index is packed into the high bits:
+
+```
+blockSize = 1 << (24 - (maxIdx.bit_length() - 1))
+```
+
+| Standard | Wordlist Size | Block Size | Colors per Word |
+|----------|---------------|------------|-----------------|
+| BIP-39, Electrum | 2048 | 2¹³ | 8,192 |
+| SLIP-39 | 1024 | 2¹⁴ | 16,384 |
+
+Every offset produces a distinct color: the channel shift is a bijective mod-256 addition, and the permutation only
+reorders an already-distinct triple. No two offsets collide.
+
+Since each grid holds exactly one cell per word, the total is `blockSize ^ wordCount`:
+
+| Phrase | Entropy | Distinct Images per Salt |
+|--------|---------|--------------------------|
+| 12-word BIP-39 / Electrum | 156 bits | 9.13 × 10⁴⁶ |
+| 15-word BIP-39 | 195 bits | 5.02 × 10⁵⁸ |
+| 18-word BIP-39 | 234 bits | 2.76 × 10⁷⁰ |
+| 20-word SLIP-39 | 280 bits | 1.94 × 10⁸⁴ |
+| 21-word BIP-39 | 273 bits | 1.52 × 10⁸² |
+| 24-word BIP-39 / Electrum | 312 bits | 8.34 × 10⁹³ |
+| 33-word SLIP-39 | 462 bits | 1.19 × 10¹³⁹ |
+
+Notes:
+
+- **Positions across salts** — the layout dimension only opens up when the salt changes, contributing up to
+  `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
+- **Interactive preview** — the clickable color-space editor rejects any color matching an orthogonal neighbour,
+  trimming at most 4 of 8,192 candidates per cell. The reduction is under 0.05%.
+- **No salt** — the grid is left in natural reading order and all masks are zero, but the per-word color count is
+  unchanged.
+
+---
+
 ## Valid PNG Requirements
 
 To successfully decode, a PNG must pass all of the following checks:
@@ -81,45 +133,111 @@ Every pixel within a single grid cell must be **exactly the same color**. Any va
 ## Requirements
 
 - Python 3.10+
-- Jupyter Notebook (to run the `.ipynb`)
+- A terminal with 24-bit color support (Windows Terminal, iTerm2, or any modern Linux terminal)
 
 ### Dependencies
 
 ```
+typer
+rich
+textual
 pillow
 mnemonic
 shamir-mnemonic
 argon2-cffi
+setuptools
 ```
 
-Install all at once:
+---
+
+## Installation
 
 ```bash
-pip install pillow mnemonic shamir-mnemonic argon2-cffi
+pip install spicebag
 ```
+
+This installs the `spicebag` command on your PATH. Run it with no arguments for the TUI, or pass a
+subcommand for one-shot use.
+
+### From source
+
+Clone the repository, then let the launcher build the virtual environment for you:
+
+```bat
+git clone https://github.com/E14118/Spicebag.git
+cd Spicebag
+run.bat
+```
+
+`run.bat` creates `.venv/`, installs `requirements.txt`, verifies dependencies, and launches the app.
+
+To set it up by hand instead — required on Linux and macOS, where `run.bat` does not apply:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+export PYTHONPATH=.              # Windows: set PYTHONPATH=.
+python spicebag/app/cli.py
+```
+
+All imports are absolute (`from spicebag.xxx import yyy`), so `PYTHONPATH` must include the repository
+root. For editor integration, copy `.env.example` to `.env`.
 
 ---
 
 ## Usage
 
-1. Open the notebook in Jupyter:
+### Interactive TUI
 
-   ```bash
-   jupyter notebook spicebag.ipynb
-   ```
+Run with no arguments to open the full-screen interface:
 
-2. Run all cells. A menu will appear:
+```bash
+spicebag            # installed via pip
+run.bat             # from a source checkout on Windows
+```
 
-   ```
-   Spicebag by E14118
-   ——————————————————
-   1) Generate image from seed phrase
-   2) Generate image from seed phrase (bulk)
-   3) Decode seed phrase from image
-   0) Exit
-   ```
+Type a command at the prompt:
 
-3. Follow the interactive prompts. Seed phrases are entered via hidden input (`getpass`) and file paths are selected through native OS dialogs.
+| Command | Action |
+|---------|--------|
+| `encode` | Walk through encoding a seed phrase into a PNG, or bulk-generate a ZIP of variants |
+| `decode` | Recover a seed phrase from a PNG, with optional `.txt` export |
+| `help` | Open the in-app reference |
+| `banner` | Toggle the ASCII banner (preference persists across sessions) |
+| `clear` | Clear the scrollback |
+| `exit` | Quit |
+
+The encode flow prompts in order for word count, phrase, salt, cell size, and save path, then shows
+a clickable color-space preview before writing the file.
+
+### Command line
+
+Pass a subcommand to skip the TUI entirely:
+
+```bash
+spicebag encode "<phrase>" <path> [--salt <s>] [--cell-px <n>]
+spicebag decode <path> [--salt <s>]
+```
+
+From a source checkout, substitute `run.bat` for `spicebag`.
+
+| Option | Default | Applies to | Meaning |
+|--------|---------|------------|---------|
+| `--salt` | *(empty)* | both | Passphrase for Argon2id key derivation |
+| `--cell-px` | `100` | encode | Pixel width of each square color cell |
+
+Try it against the sample images in
+[`examples/`](https://github.com/E14118/Spicebag/tree/main/examples):
+
+```bash
+spicebag decode examples/images/12-seedless.png
+spicebag decode examples/images/12-seed-Z3wjBTmDso1eLQ.png --salt Z3wjBTmDso1eLQ
+```
+
+### Output location
+
+Images, ZIP archives, screenshots, and the banner preference file are written to `~/Spicebag/`.
 
 ---
 
@@ -144,4 +262,5 @@ pip install pillow mnemonic shamir-mnemonic argon2-cffi
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the
+[MIT License](https://github.com/E14118/Spicebag/blob/main/LICENSE).

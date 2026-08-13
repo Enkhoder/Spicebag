@@ -2,15 +2,27 @@
 
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version
+from pathlib import Path
 import subprocess
 import sys
+
+
+
+######## CONSTANTS ########
+
+REQUIREMENTS_PATH = Path(__file__).resolve().parent.parent.parent / "requirements.txt"
+
 
 
 ######## DEPENDENCY CHECKER ########
 
 def checkDependencies():
-    """Check if all requirements are installed."""
-    with open("requirements.txt", "r") as f:
+    """Check if all requirements are installed. A no-op when running from an installed
+    package, where requirements.txt is not shipped and pip already resolved the deps."""
+    if not REQUIREMENTS_PATH.is_file():
+        return True
+
+    with open(REQUIREMENTS_PATH, "r") as f:
         requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
     missing = []
@@ -32,13 +44,13 @@ def checkDependencies():
 
         if choice == 'y' or choice == '':
             print("\nInstalling dependencies...\n")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS_PATH)])
             print("\nInstallation complete.\n")
 
         else:
             print("\nWarning: Missing dependencies may cause the application to crash.\n")
             return False
-            
+
     return True
 
 
