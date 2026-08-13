@@ -1,3 +1,67 @@
-.venv/
+######## PYTHON ########
+
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+
+
+######## VIRTUAL ENVIRONMENTS ########
+
+.venv/
+venv/
+env/
+ENV/
+
+
+######## PACKAGING / BUILD ########
+
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+
+######## ENVIRONMENT ########
+
+.env
+.env.local
+
+
+######## TOOLING CACHES ########
+
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.pytest_cache/
+.pyright/
+.ipynb_checkpoints/
+
+
+######## EDITORS ########
+
+.idea/
+*.swp
+*.swo
+*~
+
+
+######## OPERATING SYSTEM ########
+
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+
+######## SPICEBAG ARTIFACTS ########
+
+*.zip
+scratch/
+graphify-out/
+ipynb.ipynb
