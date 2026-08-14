@@ -1,6 +1,5 @@
 ######## LIBRARIES ########
 
-from typing import Optional
 import typer
 
 
@@ -29,8 +28,8 @@ def main(ctx: typer.Context):
 def encode(
     mnemonic: str = typer.Argument(..., help="The seed phrase to encode"),
     path: str = typer.Argument(..., help="Path to save the PNG file"),
-    salt: Optional[str] = typer.Option("", help="Optional salt for encryption"),
-    cellPx: int = typer.Option(100, help="Size of each color cell in pixels")
+    salt: str = typer.Option("", help="Optional salt for encryption"),
+    cellPx: int = typer.Option(100, "--cell-px", help="Size of each color cell in pixels")
 ):
     """Encode a seed phrase into a color-coded PNG."""
     from spicebag.core.generator import encodeMnemonic
@@ -48,7 +47,7 @@ def encode(
 @app.command()
 def decode(
     path: str = typer.Argument(..., help="Path to the PNG file to decode"),
-    salt: Optional[str] = typer.Option("", help="Optional salt used during encryption")
+    salt: str = typer.Option("", help="Optional salt used during encryption")
 ):
     """Decode a color-coded PNG back into a seed phrase."""
     from spicebag.core.decoder import decodeImage

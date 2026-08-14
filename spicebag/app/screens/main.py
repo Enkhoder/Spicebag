@@ -9,12 +9,12 @@ import json
 
 from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
-from textual.widgets import Static, Input, RichLog, Rule
 from spicebag.app.handlers.decode import DecodeHandlerMixin
 from spicebag.app.handlers.encode import EncodeHandlerMixin
 from spicebag.app.widgets.secureInput import SecureInput
-from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, Input, RichLog, Rule
 from spicebag.app.widgets.optionsBar import OptionsBar
+from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen

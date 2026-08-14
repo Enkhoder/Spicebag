@@ -5,6 +5,7 @@ from spicebag.constants.defaults import (
     SEED_TYPE_STANDARDS,
     RGB_VALUE_SHIFTS
 )
+from spicebag.constants.theme import GRID_SIZES
 from dataclasses import dataclass, field
 from PIL import Image
 import secrets
@@ -100,19 +101,8 @@ def identifySeedType(rawInput: str, expectedLength: int | None = None):
 
             wordIndices.append(idx)
 
-        if allValid:
-            if name == "SLIP39":
-                from shamir_mnemonic import Share
-
-                try:
-                    Share.from_mnemonic(mnemonicStr)
-                    return wordIndices, name, wordCount, maxIdx
-
-                except Exception:
-                    pass
-
-            elif validator(mnemonicStr):
-                return wordIndices, name, wordCount, maxIdx
+        if allValid and validator(mnemonicStr):
+            return wordIndices, name, wordCount, maxIdx
 
     raise ValueError("Mnemonic checksum failed. Unrecognized or invalid seed phrase.")
 
@@ -131,27 +121,12 @@ def encodeMnemonic(
     progressCallback=None
 ):
     if precomputedMnemonic is not None:
-        indices, standard, wordCount, maxIdx = precomputedMnemonic
+        indices, _, wordCount, maxIdx = precomputedMnemonic
 
     else:
-        indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
+        indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
 
-    if standard == "SLIP39":
-        if wordCount == 20:
-            cols, rows = (4, 5)
-
-        else:
-            cols, rows = (3, 11)
-
-    else:
-        mapping = {
-            12: (3, 4),
-            15: (3, 5),
-            18: (3, 6),
-            21: (3, 7),
-            24: (4, 6)
-        }
-        cols, rows = mapping[wordCount]
+    cols, rows = GRID_SIZES[wordCount]
 
     if precomputed is not None:
         maskKey, rngSeed = precomputed
@@ -217,24 +192,8 @@ def encodeMnemonic(
 
 
 def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelCheck=None, progressCallback=None):
-    indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
-
-    if standard == "SLIP39":
-        if wordCount == 20:
-            cols, rows = (4, 5)
-
-        else:
-            cols, rows = (3, 11)
-
-    else:
-        mapping = {
-            12: (3, 4),
-            15: (3, 5),
-            18: (3, 6),
-            21: (3, 7),
-            24: (4, 6)
-        }
-        cols, rows = mapping[wordCount]
+    indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
+    cols, rows = GRID_SIZES[wordCount]
 
     if salt:
         masterKey = deriveMasterKey(salt)
@@ -333,24 +292,9 @@ class ColorSpace:
     colorRGB: dict = field(default_factory=dict)
 
 
-def gridDimensions(standard, wordCount):
-    if standard == "SLIP39":
-        return (4, 5) if wordCount == 20 else (3, 11)
-
-    mapping = {
-        12: (3, 4),
-        15: (3, 5),
-        18: (3, 6),
-        21: (3, 7),
-        24: (4, 6)
-    }
-
-    return mapping[wordCount]
-
-
 def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=None):
-    indices, standard, wordCount, maxIdx = identifySeedType(mnemonicRaw)
-    cols, rows = gridDimensions(standard, wordCount)
+    indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
+    cols, rows = GRID_SIZES[wordCount]
 
     if salt:
         masterKey = deriveMasterKey(salt)

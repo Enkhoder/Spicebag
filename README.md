@@ -46,7 +46,7 @@ Once the salt is fixed, almost everything is deterministic:
 | XOR mask | `deriveMask(maskKey, wordPosition, maxIdx)` | ❌ Fixed |
 | Channel shift | `RGB_VALUE_SHIFTS[wordPosition]` | ❌ Fixed |
 | Channel permutation | Selected by `(R+G+B) % 6` | ❌ Derived |
-| **Block offset** | `secrets.randbelow(blockSize)` | ✅ **Free** |
+| **Block offset** | `secrets.SystemRandom().randrange(blockSize)` | ✅ **Free** |
 
 The block offset is the only free variable. It occupies the low bits of the 24-bit value left over after the word
 index is packed into the high bits:
@@ -110,10 +110,10 @@ Image dimensions must be evenly divisible by their grid's column and row count (
 
 | Status | Chunk Types |
 |--------|-------------|
-| ✅ Allowed | `IHDR`, `IDAT`, `IEND`, `tIME`, `tEXt`, `iTXt`, `zTXt`, `sRGB`, `gAMA`, `pHYs` |
 | ❌ Forbidden | `PLTE`, `tRNS`, `bKGD`, `sBIT`, `iCCP` |
+| ✅ Allowed | Everything else, including `IHDR`, `IDAT`, `IEND`, `tIME`, `tEXt`, `iTXt`, `zTXt`, `sRGB`, `gAMA`, `pHYs` |
 
-Any forbidden chunk causes immediate rejection. This ensures the image uses a direct RGB color model with no palette, transparency, or embedded ICC profile.
+Validation is a blocklist, not an allowlist: any forbidden chunk causes immediate rejection, and every other chunk type passes. This ensures the image uses a direct RGB color model with no palette, transparency, or embedded ICC profile.
 
 ### Color Mode
 
@@ -145,7 +145,6 @@ pillow
 mnemonic
 shamir-mnemonic
 argon2-cffi
-setuptools
 ```
 
 ---
@@ -255,7 +254,7 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 ## Performance & Bulk Generation
 
 - **Algorithmic Separation**: Bulk image generation (`bulkEncodeMnemonic`) decouples the color space calculations from the resolution upscaling. This minimizes memory overhead during logic generation.
-- **Strictly Unique Colors**: Offsets for cells are sampled without replacement using `random.sample` (out of the 8192 available colors for BIP-39) to mathematically guarantee that all bulk-generated images use unique cell colors.
+- **Strictly Unique Colors**: Offsets for cells are sampled without replacement using `secrets.SystemRandom().sample` (out of the 8192 available colors for BIP-39) to mathematically guarantee that all bulk-generated images use unique cell colors.
 - **Optimized PNG Encoding**: High-resolution cell scaling (e.g. 2000px per cell) processes massive amounts of pixel data. The bulk encoder uses a fast compression level (`compress_level=1`) to yield a ~43% execution speedup, dropping bulk generation times significantly.
 
 ---

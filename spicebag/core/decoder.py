@@ -1,15 +1,13 @@
 ######## LIBRARIES ########
 
 from spicebag.constants.defaults import (
-    BIP39_LIST,
-    ELECTRUM_LIST,
-    SLIP39_LIST,
+    WORD_COUNT_MAX_INDEX,
+    SEED_TYPE_STANDARDS,
     FORBIDDEN_CHUNKS,
-    RGB_VALUE_SHIFTS,
-    validateBIP39,
-    validateElectrum
+    RGB_VALUE_SHIFTS
 )
 from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, decodeColor
+from spicebag.constants.theme import GRID_SIZES
 from PIL import Image
 import random
 import struct
@@ -68,26 +66,12 @@ def validatePNGStructure(path) -> None:
 
 
 def getGridDimensions(width: int, height: int):
-    if width * 4 == height * 3:
-        return 3, 4, 12, 2048
-
-    if width * 5 == height * 3:
-        return 3, 5, 15, 2048
-
-    if width * 2 == height:
-        return 3, 6, 18, 2048
-
-    if width * 5 == height * 4:
-        return 4, 5, 20, 1024
-
-    if width * 7 == height * 3:
-        return 3, 7, 21, 2048
-
-    if width * 3 == height * 2:
-        return 4, 6, 24, 2048
-
-    if width * 11 == height * 3:
-        return 3, 11, 33, 1024
+    """Recover (cols, rows, wordCount, maxIdx) from the image aspect ratio. Cross-multiplied
+    so the comparison stays exact in integers. Every ratio in GRID_SIZES is distinct, so at
+    most one entry can match."""
+    for wordCount, (cols, rows) in GRID_SIZES.items():
+        if width * rows == height * cols:
+            return cols, rows, wordCount, WORD_COUNT_MAX_INDEX[wordCount]
 
     raise ValueError("Invalid image aspect ratio.")
 
@@ -127,7 +111,7 @@ def validateImage(path) -> bool:
         raise ValueError("Failed to load image pixel data.")
 
     width, height = img.size
-    cols, rows, wordCount, _ = getGridDimensions(width, height)
+    cols, rows, _, _ = getGridDimensions(width, height)
 
     if width % cols != 0 or height % rows != 0:
         raise ValueError("Invalid cell aspect ratio.")
@@ -166,29 +150,16 @@ def validateImage(path) -> bool:
 ######## IMAGE DECODER ########
 
 def resolveMnemonic(wordIndices, wordCount):
-    if wordCount in (12, 15, 18, 21, 24):
-        mnemonic = " ".join([BIP39_LIST[idx] for idx in wordIndices])
+    """Try each standard that admits this word count, in declaration order, and return the
+    first phrase that passes its checksum."""
+    for name, wordCounts, wordList, _, validator in SEED_TYPE_STANDARDS:
+        if wordCount not in wordCounts:
+            continue
 
-        if validateBIP39(mnemonic):
-            return (mnemonic, "BIP39")
+        mnemonic = " ".join([wordList[idx] for idx in wordIndices])
 
-    if wordCount in (12, 24):
-        mnemonic = " ".join([ELECTRUM_LIST[idx] for idx in wordIndices])
-
-        if validateElectrum(mnemonic):
-            return (mnemonic, "Electrum")
-
-    if wordCount in (20, 33):
-        mnemonic = " ".join([SLIP39_LIST[idx] for idx in wordIndices])
-
-        try:
-            from shamir_mnemonic import Share
-            Share.from_mnemonic(mnemonic)
-
-            return (mnemonic, "SLIP39")
-
-        except Exception:
-            pass
+        if validator(mnemonic):
+            return (mnemonic, name)
 
     return None
 

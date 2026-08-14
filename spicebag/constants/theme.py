@@ -35,8 +35,6 @@ GRID_SIZES = {
     33: (3, 11)
 }
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-
 OUTPUT_DIR = Path.home() / "Spicebag"
 
 ASCII_ART_BANNER = """
@@ -56,27 +54,6 @@ ASCII_ART_BANNER = """
                                                                  ░░░░░░░  
                                                                           
 """
-
-
-def getGradientString(text: str) -> str:
-    import colorsys
-    result = ""
-    maxW = len(text)
-    for x, char in enumerate(text):
-        if char.isspace():
-            result += char
-            continue
-
-        t = x / max(1, maxW - 1)
-        h = (G_START[0] + (G_END[0] - G_START[0]) * t) % 1.0
-        light = G_START[1] + (G_END[1] - G_START[1]) * t
-        s = G_START[2] + (G_END[2] - G_START[2]) * t
-
-        r, g, b = colorsys.hls_to_rgb(h, light, s)
-        hexColor = f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
-        result += f"[{hexColor}]{char}[/]"
-
-    return result
 
 
 

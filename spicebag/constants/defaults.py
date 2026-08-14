@@ -1,6 +1,7 @@
 ######## LIBRARIES ########
 
 from shamir_mnemonic.wordlist import WORDLIST as SLIP39_LIST
+from shamir_mnemonic import Share
 from mnemonic import Mnemonic
 from pathlib import Path
 
@@ -25,19 +26,6 @@ ELECTRUM_LIST = loadElectrumWords()
 
 
 ######## CONSTANTS ########
-
-ALLOWED_CHUNKS = {
-    b'IHDR',
-    b'IDAT',
-    b'IEND',
-    b'tIME',
-    b'tEXt',
-    b'iTXt',
-    b'zTXt',
-    b'sRGB',
-    b'gAMA',
-    b'pHYs',
-}
 
 FORBIDDEN_CHUNKS = {
     b'PLTE',
@@ -91,8 +79,24 @@ def validateElectrum(mnemonic: str) -> bool:
         return False
 
 
+def validateSLIP39(mnemonic: str) -> bool:
+    try:
+        Share.from_mnemonic(mnemonic)
+
+        return True
+
+    except Exception:
+        return False
+
+
 SEED_TYPE_STANDARDS = [
-    ("BIP39", (12, 15, 18, 21, 24), BIP39_LIST, 2048, lambda s: validateBIP39(s)),
-    ("ELECTRUM", (12, 24), ELECTRUM_LIST, 2048, lambda s: validateElectrum(s)),
-    ("SLIP39", (20, 33), SLIP39_LIST, 1024, lambda s: True)
+    ("BIP39", (12, 15, 18, 21, 24), BIP39_LIST, 2048, validateBIP39),
+    ("Electrum", (12, 24), ELECTRUM_LIST, 2048, validateElectrum),
+    ("SLIP39", (20, 33), SLIP39_LIST, 1024, validateSLIP39)
 ]
+
+WORD_COUNT_MAX_INDEX = {
+    wordCount: maxIdx
+    for _, wordCounts, _, maxIdx, _ in SEED_TYPE_STANDARDS
+    for wordCount in wordCounts
+}
