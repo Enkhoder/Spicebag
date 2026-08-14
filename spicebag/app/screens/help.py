@@ -528,6 +528,13 @@ class HelpScreen(Screen):
 
 
     def _exitMaskFreeze(self) -> None:
+        # BUG: this reshuffle fires on the click-relative grace/mask timers, but
+        # _imgTimer keeps ticking on its own phase from on_mount and is never
+        # restarted here. The gap to the next ambient reshuffle can land anywhere
+        # from ~0s to just under 1s depending on when the click happened, instead
+        # of a steady 1s cadence. Cosmetic only, no functional impact — fix by
+        # stopping and recreating _imgTimer at the end of this method so the
+        # ambient clock re-anchors to the moment the sample becomes visible again.
         self._maskTimer = None
         self._imgMasked = False
         if self._imgColorSpace is None:
