@@ -3,7 +3,6 @@
 from shamir_mnemonic.wordlist import WORDLIST as SLIP39_LIST
 from shamir_mnemonic import Share
 from mnemonic import Mnemonic
-from pathlib import Path
 
 
 
@@ -13,15 +12,7 @@ BIP39 = Mnemonic("english")
 
 BIP39_LIST = BIP39.wordlist
 
-
-def loadElectrumWords():
-    cachePath = Path(__file__).parent / "electrum-english.txt"
-
-    with open(cachePath, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f.readlines() if line.strip()]
-
-
-ELECTRUM_LIST = loadElectrumWords()
+ELECTRUM_LIST = BIP39_LIST
 
 
 

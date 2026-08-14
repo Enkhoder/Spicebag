@@ -49,7 +49,9 @@ Each word index is transformed to an RGB color through four reversible steps:
 `deriveMasterKey()` uses Argon2id (`time_cost=4`, `memory_cost=256 MB`) on the salt, then `deriveSubkeys()` expands it via HKDF-SHA512 into three 128-byte keys (`maskKey`, `permKey`, `offsetKey`). `permKey[:8]` seeds a `random.Random` used for one purpose only: deterministic grid-cell position shuffling, which `decoder.py` mirrors to un-shuffle. `offsetKey` is currently unused.
 
 ### Constants (`spicebag/constants/`)
-- `defaults.py` — wordlists (BIP39 via `mnemonic`, Electrum from bundled `.txt`, SLIP39 via `shamir-mnemonic`), validators, `SEED_TYPE_STANDARDS`, `WORD_COUNT_MAX_INDEX`, `FORBIDDEN_CHUNKS`, `RGB_VALUE_SHIFTS`, `PERMUTATIONS`.
+- `defaults.py` — wordlists (BIP39 via `mnemonic`, SLIP39 via `shamir-mnemonic`), validators, `SEED_TYPE_STANDARDS`, `WORD_COUNT_MAX_INDEX`, `FORBIDDEN_CHUNKS`, `RGB_VALUE_SHIFTS`, `PERMUTATIONS`.
+
+`ELECTRUM_LIST` is an alias for `BIP39_LIST`, not a separate table. Electrum's English wordlist is the BIP-39 English wordlist — the same 2048 words in the same order, so the word-to-index mapping is identical and the two standards are separated only by their checksum validators. A bundled `electrum-english.txt` used to sit beside this module; it was byte-identical to the `english.txt` that ships inside the `mnemonic` package, so it pinned nothing that BIP-39 decoding was not already depending on. If Electrum ever forks its English list, give `ELECTRUM_LIST` its own sorted 2048-word source here — `binarySearchWord` requires sorted input.
 - `theme.py` — `AppState` enum, `OUTPUT_DIR` (`~/Spicebag/`), `GRID_SIZES`, color palette constants, banner ASCII art.
 
 Three tables are single-sourced and must stay that way, because every consumer derives from them rather than restating them:
