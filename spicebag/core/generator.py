@@ -176,7 +176,7 @@ def encodeMnemonic(
         random.Random(rngSeed).shuffle(allCoords)
 
     blockSize = computeBlockSize(maxIdx)
-    rng = random.Random(rngSeed) if rngSeed is not None else secrets.SystemRandom()
+    rng = secrets.SystemRandom()
     wordOffsets = [rng.randrange(blockSize) for _ in range(wordCount)]
 
     img = Image.new("RGB", (cols, rows))
@@ -240,7 +240,6 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
         masterKey = deriveMasterKey(salt)
         maskKey, permKey, _ = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
-        rng = random.Random(rngSeed)
 
         if progressCallback:
             progressCallback(1 / (count + 1))
@@ -248,7 +247,6 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
     else:
         maskKey = None
         rngSeed = None
-        rng = secrets.SystemRandom()
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
 
@@ -256,6 +254,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
         random.Random(rngSeed).shuffle(allCoords)
 
     blockSize = computeBlockSize(maxIdx)
+    rng = secrets.SystemRandom()
     wordOffsets = []
 
     for _ in range(wordCount):
