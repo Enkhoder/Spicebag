@@ -260,6 +260,16 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 
 ---
 
+## Contributing
+
+[`docs/ARCHITECTURE.md`](https://github.com/Enkhoder/Spicebag/blob/main/docs/ARCHITECTURE.md)
+maps the codebase layer by layer and documents the invariants that are not obvious from reading a
+single file — which randomness source the block offset must use, which tables are single-sourced,
+and where seed phrases are deliberately kept out of the log. Read it before changing anything in
+`spicebag/core/` or `spicebag/utils/colors.py`.
+
+---
+
 ## License
 
 This project is licensed under the
