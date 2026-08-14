@@ -79,8 +79,8 @@ Notes:
 
 - **Positions across salts** — the layout dimension only opens up when the salt changes, contributing up to
   `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
-- **Interactive preview** — the clickable color-space editor rejects any color matching an orthogonal neighbour,
-  trimming at most 4 of 8,192 candidates per cell. The reduction is under 0.05%.
+- **Interactive preview** — the clickable color-space editor rejects any color matching the cell's current color or
+  an orthogonal neighbour, trimming at most 5 of 8,192 candidates per cell. The reduction is under 0.07%.
 - **No salt** — the grid is left in natural reading order and all masks are zero, but the per-word color count is
   unchanged.
 
