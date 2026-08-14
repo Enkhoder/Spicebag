@@ -99,15 +99,18 @@ ENCODE_PATH_ROWS = [
     ("safe/image.png", C_INP,
      [("image.png", C_WHITE), (".png in folder safe", C_DIM)]),
     ("safe/myFolder", C_INP,
-     [("If myFolder is a folder, save with default name inside it; else myFolder.png in folder safe",
-       C_DIM)]),
+     [("If myFolder is a folder, save with default name inside it; else myFolder.png in folder safe "
+       "(flexible)", C_DIM)]),
+    ("safe/myFolder/", C_INP,
+     [("Trailing slash, save with default name inside folder myFolder; ", C_DIM),
+      ("else directory not found", C_FAIL)]),
     ("safe//myFolder", C_INP,
      [("Double slash forces myFolder.png, folder or not", C_DIM)]),
     ("//image", C_INP,
      [("image.png in default directory", C_DIM)]),
     ("myFolder", C_INP,
-     [("Bare name is treated as directory. Save with default name inside folder myFolder, only if "
-       "it exists. Spicebag does not create custom folders for you.", C_DIM)]),
+     [("Bare name is treated as directory. Save with default name inside folder myFolder if it "
+       "exists. Spicebag does not create custom folders for you.", C_DIM)]),
     ("myFolder/", C_INP,
      [("Trailing slash is tolerable, same treatment as above", C_DIM)]),
     ("myFolder//", C_INP,
@@ -701,7 +704,7 @@ class HelpScreen(Screen):
 
         self._hoverRegions = [
             (lineIdx + offset, colStart, colEnd, wordIdx)
-            for (lineIdx, colStart, colEnd, node, wordIdx) in hoverRegions
+            for (lineIdx, colStart, colEnd, _, wordIdx) in hoverRegions
         ]
 
         lines.append(Text(""))
