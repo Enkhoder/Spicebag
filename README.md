@@ -1,6 +1,6 @@
 # Spicebag
 
-**Visual Mnemonic Encoder / Decoder** by [E14118](https://github.com/E14118)
+**Visual Mnemonic Encoder / Decoder** by [Enkhoder](https://github.com/Enkhoder)
 
 Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed — optionally encrypted with a user-provided salt.
 
@@ -163,7 +163,7 @@ subcommand for one-shot use.
 Clone the repository, then let the launcher build the virtual environment for you:
 
 ```bat
-git clone https://github.com/E14118/Spicebag.git
+git clone https://github.com/Enkhoder/Spicebag.git
 cd Spicebag
 run.bat
 ```
@@ -227,7 +227,7 @@ From a source checkout, substitute `run.bat` for `spicebag`.
 | `--cell-px` | `100` | encode | Pixel width of each square color cell |
 
 Try it against the sample images in
-[`examples/`](https://github.com/E14118/Spicebag/tree/main/examples):
+[`examples/`](https://github.com/Enkhoder/Spicebag/tree/main/examples):
 
 ```bash
 spicebag decode examples/images/12-seedless.png
@@ -262,4 +262,4 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 ## License
 
 This project is licensed under the
-[MIT License](https://github.com/E14118/Spicebag/blob/main/LICENSE).
+[MIT License](https://github.com/Enkhoder/Spicebag/blob/main/LICENSE).
