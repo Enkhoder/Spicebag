@@ -189,7 +189,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         if cancelCheck and cancelCheck():
             raise InterruptedError("Cancelled")
 
-        maskKey, permKey, _ = deriveSubkeys(masterKey)
+        maskKey, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
     else:

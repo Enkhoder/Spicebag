@@ -43,11 +43,13 @@ def hkdfExpand(key: bytes, info: bytes, length: int = 128) -> bytes:
 
 
 def deriveSubkeys(masterKey: bytes):
+    """Expand the Argon2id master key into the two salt-derived secrets the encoding needs.
+    Block offsets are deliberately absent: they are the encoding's only free variable and must
+    come from secrets.SystemRandom(), never from the salt."""
     maskKey = hkdfExpand(masterKey, b"maskDomain")
     permKey = hkdfExpand(masterKey, b"permDomain")
-    offsetKey = hkdfExpand(masterKey, b"offsetDomain")
 
-    return maskKey, permKey, offsetKey
+    return maskKey, permKey
 
 
 def deriveMask(maskKey: bytes, index: int, maxIndex: int) -> int:

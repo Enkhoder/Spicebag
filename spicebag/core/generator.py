@@ -133,7 +133,7 @@ def encodeMnemonic(
 
     elif salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey, _ = deriveSubkeys(masterKey)
+        maskKey, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
         if progressCallback:
             progressCallback(0.01)
@@ -197,7 +197,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
 
     if salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey, _ = deriveSubkeys(masterKey)
+        maskKey, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
         if progressCallback:
@@ -298,7 +298,7 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
 
     if salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey, _ = deriveSubkeys(masterKey)
+        maskKey, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
         if progressCallback:

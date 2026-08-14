@@ -46,7 +46,9 @@ Each word index is transformed to an RGB color through four reversible steps:
 3. **Channel shift** — per-position `(ΔR, ΔG, ΔB)` tuples from `RGB_VALUE_SHIFTS` in `spicebag/constants/defaults.py`.
 4. **Channel permutation** — one of 6 fixed permutations selected by `(R+G+B) % 6`.
 
-`deriveMasterKey()` uses Argon2id (`time_cost=4`, `memory_cost=256 MB`) on the salt, then `deriveSubkeys()` expands it via HKDF-SHA512 into three 128-byte keys (`maskKey`, `permKey`, `offsetKey`). `permKey[:8]` seeds a `random.Random` used for one purpose only: deterministic grid-cell position shuffling, which `decoder.py` mirrors to un-shuffle. `offsetKey` is currently unused.
+`deriveMasterKey()` uses Argon2id (`time_cost=4`, `memory_cost=256 MB`) on the salt, then `deriveSubkeys()` expands it via HKDF-SHA512 into two 128-byte keys (`maskKey`, `permKey`). `permKey[:8]` seeds a `random.Random` used for one purpose only: deterministic grid-cell position shuffling, which `decoder.py` mirrors to un-shuffle.
+
+There is deliberately no third subkey for block offsets. An earlier `offsetKey` existed and was never wired up; the offset is the encoding's only free variable, so deriving it from the salt in any form collapses every encode of a given phrase+salt to one image. It stays on `secrets.SystemRandom()`.
 
 ### Constants (`spicebag/constants/`)
 - `defaults.py` — wordlists (BIP39 via `mnemonic`, SLIP39 via `shamir-mnemonic`), validators, `SEED_TYPE_STANDARDS`, `WORD_COUNT_MAX_INDEX`, `FORBIDDEN_CHUNKS`, `RGB_VALUE_SHIFTS`, `PERMUTATIONS`.
