@@ -28,10 +28,13 @@ wheels/
 
 
 
-######## ENVIRONMENT ########
+######## ENVIRONMENT AND CREDENTIALS ########
 
 .env
 .env.*
+.pypirc
+*.pem
+*.key
 
 
 
