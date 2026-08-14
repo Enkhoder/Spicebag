@@ -25,6 +25,47 @@ def _stripQuotes(raw: str) -> str:
     return raw
 
 
+def _validateStem(stem: str) -> str | None:
+    if not stem or not stem.strip():
+        return "Filename cannot consist of only whitespaces."
+
+    if stem[0] == " ":
+        return "Filename cannot begin with a space."
+
+    if stem[-1] in (".", " "):
+        return "Filename cannot end with a period or space."
+
+    illegalChars = set()
+    for ch in stem:
+        if ch in ILLEGAL_STEM_CHARS or ord(ch) < 32:
+            illegalChars.add(ch)
+
+    if illegalChars:
+        sortedChars = sorted(list(illegalChars))
+        formatted = []
+        for ch in sortedChars:
+            if ord(ch) < 32:
+                formatted.append(repr(ch).strip("'\""))
+
+            else:
+                formatted.append(ch)
+
+        charStr = " ".join(formatted)
+
+        if len(sortedChars) > 1:
+            return f"Filename contains illegal characters: {charStr}"
+
+        else:
+            return f"Filename contains an illegal character: {charStr}"
+
+    baseName = stem.upper().rsplit(".", 1)[0]
+
+    if baseName in RESERVED_NAMES:
+        return f"'{stem}' uses a reserved system name and thus cannot be a filename."
+
+    return None
+
+
 
 ######## SAVE PATH PARSER ########
 
@@ -39,7 +80,7 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
     A single separator does a folder-priority check: if the full path is
     an existing directory the stem defaults (image saved inside).
 
-    Returns (dir_str, stem_str) or an error string.
+    Returns (dirStr, stem) or an error string.
     """
 
     if not raw:
@@ -144,44 +185,3 @@ def parseDecodePath(raw: str) -> tuple[str, str]:
         slashRunStart -= 1
 
     return (raw[:slashRunStart], raw[lastSlash + 1:])
-
-
-def _validateStem(stem: str) -> str | None:
-    if not stem or not stem.strip():
-        return "Filename cannot consist of only whitespaces."
-
-    if stem[0] == " ":
-        return "Filename cannot begin with a space."
-
-    if stem[-1] in (".", " "):
-        return "Filename cannot end with a period or space."
-
-    illegalChars = set()
-    for ch in stem:
-        if ch in ILLEGAL_STEM_CHARS or ord(ch) < 32:
-            illegalChars.add(ch)
-
-    if illegalChars:
-        sortedChars = sorted(list(illegalChars))
-        formatted = []
-        for ch in sortedChars:
-            if ord(ch) < 32:
-                formatted.append(repr(ch).strip("'\""))
-
-            else:
-                formatted.append(ch)
-
-        charStr = " ".join(formatted)
-
-        if len(sortedChars) > 1:
-            return f"Filename contains illegal characters: {charStr}"
-
-        else:
-            return f"Filename contains an illegal character: {charStr}"
-
-    baseName = stem.upper().rsplit(".", 1)[0]
-
-    if baseName in RESERVED_NAMES:
-        return f"'{stem}' uses a reserved system name and thus cannot be a filename."
-
-    return None

@@ -8,7 +8,7 @@ Plain-text dummy mnemonics, one per supported word count.
 
 | File | Words | Standard |
 |------|-------|----------|
-| `12-word-phrase.txt` | 12 | BIP-39 |
+| `12-word-phrase.txt` | 12 | Electrum |
 | `20-word-phrase.txt` | 20 | SLIP-39 |
 | `24-word-phrase.txt` | 24 | BIP-39 |
 | `33-word-phrase.txt` | 33 | SLIP-39 |
