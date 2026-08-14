@@ -236,7 +236,20 @@ spicebag
 
 On Windows, `run.bat` handles the venv, the dependency check and `PYTHONPATH` for you.
 
-There is no test suite and no linter or formatter configuration. The house style is 128-character
+`tests/smoke.py` is the only test. It decodes every fixture in `examples/images/`, confirms the
+four deliberately invalid ones still fail, round-trips each recovered phrase through
+`encodeMnemonic` and `bulkEncodeMnemonic` salted and unsalted, and asserts that three encodes of
+the same phrase and salt produce three different files. Run it from the repository root:
+
+```bash
+python tests/smoke.py
+```
+
+CI runs it on every pull request across Ubuntu (3.10, 3.13) and Windows (3.12), then builds the
+artifacts and rejects any wheel containing files that must never ship. Releases publish to PyPI
+from a `v*` tag via Trusted Publishing — see `.github/workflows/`.
+
+There is no linter or formatter configuration. The house style is 128-character
 lines, `camelCase` functions and variables, `PascalCase` classes, `ALL_CAPS` constants, and
 `######## CLUSTER TITLE ########` section headers with three blank lines before and one after.
 Identifiers that come from Textual, Rich or the Win32 API keep their original casing — `on_mount`,

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Encode and decode round trip
+        run: python tests/smoke.py
+
+      - name: Installed console script
+        run: |
+          spicebag decode examples/images/24-seedless.png
+          spicebag decode examples/images/33-seed-XjpJxIjOiPQ94DR.png --salt XjpJxIjOiPQ94DR
+
+  package:
+    name: Build and check artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Reject stray files in the wheel
+        run: |
+          python - <<'PY'
+          import glob, zipfile, sys
+
+          forbidden = ("CLAUDE.md", ".vscode", "pyrightconfig", ".env", ".pypirc")
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          leaked = [n for n in names if any(f in n for f in forbidden)]
+
+          if leaked:
+              print("Wheel contains files that must never ship:", leaked)
+              sys.exit(1)
+
+          print(f"Wheel is clean, {len(names)} entries")
+          PY
