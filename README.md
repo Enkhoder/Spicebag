@@ -181,7 +181,8 @@ python spicebag/app/cli.py
 ```
 
 All imports are absolute (`from spicebag.xxx import yyy`), so `PYTHONPATH` must include the repository
-root. For editor integration, copy `.env.example` to `.env`.
+root. Editors that do not read `PYTHONPATH` need the repository root added to their own analysis path,
+or you can `pip install -e .` and skip the variable entirely.
 
 ---
 

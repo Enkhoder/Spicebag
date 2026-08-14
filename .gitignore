@@ -6,46 +6,70 @@ __pycache__/
 *.so
 
 
+
 ######## VIRTUAL ENVIRONMENTS ########
 
 .venv/
+.venv*/
 venv/
 env/
 ENV/
+
 
 
 ######## PACKAGING / BUILD ########
 
 build/
 dist/
+wheels/
 *.egg-info/
 *.egg
 .eggs/
-wheels/
+
 
 
 ######## ENVIRONMENT ########
 
 .env
-.env.local
+.env.*
 
 
-######## TOOLING CACHES ########
 
+######## EDITORS AND IDE ########
+
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+
+
+######## TYPE CHECKERS AND LINTERS ########
+
+pyrightconfig.json
+.pyright/
 .mypy_cache/
 .pytype/
 .ruff_cache/
 .pytest_cache/
-.pyright/
 .ipynb_checkpoints/
 
 
-######## EDITORS ########
 
-.idea/
-*.swp
-*.swo
-*~
+######## AI ASSISTANT INSTRUCTIONS ########
+
+CLAUDE.md
+AGENTS.md
+.claude/
+.cursor/
+.cursorrules
+.aider*
+graphify-out/
+
 
 
 ######## OPERATING SYSTEM ########
@@ -59,9 +83,9 @@ $RECYCLE.BIN/
 .Trashes
 
 
+
 ######## SPICEBAG ARTIFACTS ########
 
 *.zip
 scratch/
-graphify-out/
 ipynb.ipynb
