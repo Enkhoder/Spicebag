@@ -1,6 +1,12 @@
-# Spicebag
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+    <img src="docs/assets/banner-dark.svg" alt="Spicebag — Visual Mnemonic Encoder / Decoder">
+  </picture>
+</p>
 
-**Visual Mnemonic Encoder / Decoder** by [Enkhoder](https://github.com/Enkhoder)
+by [Enkhoder](https://github.com/Enkhoder)
 
 Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed — optionally encrypted with a user-provided salt.
 
