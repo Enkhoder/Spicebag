@@ -279,12 +279,14 @@ def nameHoverFrameCount() -> int:
 
 
 def licenseLine(hoverPhase: int) -> Text:
-    """License credit, with the author name swept by the same reverse-video
-    gradient highlight the mascot banner title uses while hovered, and the
-    suffix swapped to a ctrl+click hint. The highlight opens on the column the
-    name starts at, so only the name slides one cell right; the separator's
-    leading space is kept in full (on top of the name's own trailing pad),
-    giving the dot one extra space of breathing room while hovered."""
+    """License credit, with the author name swept by the same gradient
+    highlight the mascot banner title uses while hovered, and the suffix
+    swapped to a ctrl+click hint. The name text stays a fixed C_WHITE against
+    the moving gradient background, so it never blends with it. The highlight
+    opens on the column the name starts at, so only the name slides one cell
+    right; the separator's leading space is kept in full (on top of the
+    name's own trailing pad), giving the dot one extra space of breathing
+    room while hovered."""
     text = Text(end="")
     if hoverPhase == -1:
         text.append(LICENSE_PREFIX, style=C_WHITE)
@@ -300,7 +302,7 @@ def licenseLine(hoverPhase: int) -> Text:
         p = (i - hoverPhase) % period
         colorIdx = p if p <= half else period - p
         bgHex = invertedGradientHex(colorIdx / half)
-        text.append(char, style=f"bold reverse {bgHex}")
+        text.append(char, style=f"bold {C_WHITE} on {bgHex}")
 
     text.append(LICENSE_SEPARATOR, style=C_WHITE)
     text.append(LICENSE_HOVER_ACTION, style=C_WHITE)
