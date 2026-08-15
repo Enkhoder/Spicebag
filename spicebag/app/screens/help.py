@@ -68,6 +68,7 @@ LICENSE_PREFIX = "(c) 2026 "
 LICENSE_NAME = "Enkhoder"
 LICENSE_SEPARATOR = " · "
 LICENSE_SUFFIX = "Licensed under the MIT License."
+LICENSE_HOVER_SUFFIX = "CTRL+click to view GitHub profile"
 NAME_HOVER_TEXT = f" {LICENSE_NAME} "
 NAME_GITHUB_URL = f"https://github.com/{LICENSE_NAME}"
 RETURN_LINE = "Press any key to return to main menu."
@@ -278,9 +279,10 @@ def nameHoverFrameCount() -> int:
 
 def licenseLine(hoverPhase: int) -> Text:
     """License credit, with the author name swept by the same reverse-video
-    gradient highlight the mascot banner title uses while hovered. The highlight
-    opens on the column the name starts at, so only the name slides one cell
-    right — its two pad cells are taken out of the separator that follows."""
+    gradient highlight the mascot banner title uses while hovered, and the
+    suffix swapped to a ctrl+click hint. The highlight opens on the column the
+    name starts at, so only the name slides one cell right — one of its two
+    pad cells is taken out of the separator's leading space, keeping the dot."""
     text = Text(end="")
     if hoverPhase == -1:
         text.append(LICENSE_PREFIX, style=C_WHITE)
@@ -298,7 +300,7 @@ def licenseLine(hoverPhase: int) -> Text:
         bgHex = invertedGradientHex(colorIdx / half)
         text.append(char, style=f"bold reverse {bgHex}")
 
-    text.append(LICENSE_SEPARATOR[2:] + LICENSE_SUFFIX, style=C_WHITE)
+    text.append(LICENSE_SEPARATOR[1:] + LICENSE_HOVER_SUFFIX, style=C_WHITE)
     return text
 
 
