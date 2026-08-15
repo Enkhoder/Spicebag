@@ -66,7 +66,7 @@ HOW_THIS_WORKS_ROWS = [
 
 LICENSE_PREFIX = "(c) 2026 "
 LICENSE_NAME = "Enkhoder"
-LICENSE_SEPARATOR = " · "
+LICENSE_SEPARATOR = "  ·  "
 LICENSE_SUFFIX = "Licensed under the MIT License."
 LICENSE_HOVER_SUFFIX = "CTRL+click to view GitHub profile"
 NAME_HOVER_TEXT = f" {LICENSE_NAME} "
