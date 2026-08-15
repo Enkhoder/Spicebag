@@ -1,14 +1,18 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
-    <img src="docs/assets/banner-dark.svg" alt="Spicebag — Visual Mnemonic Encoder / Decoder">
-  </picture>
+  <img src="docs/assets/banner.svg" alt="Spicebag">
 </p>
 
-by [Enkhoder](https://github.com/Enkhoder)
+<p align="center"><strong>Visual Mnemonic Encoder / Decoder</strong></p>
 
-Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed — optionally encrypted with a user-provided salt.
+<p align="center">
+  <a href="https://github.com/Enkhoder/Spicebag/stargazers"><img src="https://img.shields.io/github/stars/Enkhoder/Spicebag?style=for-the-badge&logo=github&logoColor=white&label=Stars&color=ECD251" alt="Stars"></a>
+  <a href="https://github.com/Enkhoder/Spicebag/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Enkhoder/Spicebag/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
+  <a href="https://github.com/Enkhoder/Spicebag/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-88A4E9?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://github.com/Enkhoder/Spicebag/blob/main/.github/workflows/ci.yml"><img src="https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-D787EF?style=for-the-badge" alt="OS"></a>
+  <a href="https://github.com/Enkhoder/Spicebag/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Enkhoder/Spicebag?style=for-the-badge&color=909090" alt="License"></a>
+</p>
+
+**Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed, and can be optionally encrypted with a user-provided salt.
 
 ---
 
@@ -16,7 +20,7 @@ Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images 
 
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
 - **Decode** a color-coded PNG back into the original seed phrase, with optional `.txt` export.
-- **Salt-based encryption** — an optional passphrase processed through **Argon2id** key derivation adds XOR masking and grid shuffling, making the image unreadable without the salt.
+- **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation adds XOR masking and grid shuffling, making the image unreadable without the salt.
 - **Multi-standard support**:
 
   | Standard | Word Counts | Wordlist Size |
@@ -25,18 +29,18 @@ Spicebag encodes cryptocurrency wallet seed phrases into color-coded PNG images 
   | Electrum | 12, 24 | 2048 |
   | SLIP-39  | 20, 33 | 1024 |
 
-- **PNG integrity checks** — rejects images with forbidden chunks (e.g. `PLTE`, `tRNS`, `iCCP`) and verifies cell-level monochromatic consistency to detect lossy compression.
+- **PNG integrity checks**: rejects images with forbidden chunks (e.g. `PLTE`, `tRNS`, `iCCP`) and verifies cell-level monochromatic consistency to detect lossy compression.
 - **Checksum validation** on decode ensures the recovered mnemonic is valid before output.
 
 ---
 
 ## How It Works
 
-1. **Word → Index** — Each seed word is looked up in its standard's wordlist.
-2. **XOR Masking** — If a salt is provided, an Argon2id-derived master key is expanded via HKDF into subkeys. A per-word mask is computed and XORed with the word index.
-3. **Index → RGB** — The masked index is packed into a 24-bit value, split into R/G/B channels, shifted by a per-word constant, and the channels are permuted.
-4. **Grid Layout** — Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
-5. **Decoding** reverses all steps: un-permute, un-shift, un-mask, and look up the word by index.
+1. **Word → Index**: Each seed word is looked up in its standard's wordlist.
+2. **XOR Masking**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into subkeys. A per-word mask is computed and XORed with the word index.
+3. **Index → RGB**: The masked index is packed into a 24-bit value, split into R/G/B channels, shifted by a per-word constant, and the channels are permuted.
+4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
+5. **Decoding**: reverses all steps: un-permute, un-shift, un-mask, and look up the word by index.
 
 ---
 
@@ -48,7 +52,7 @@ Once the salt is fixed, almost everything is deterministic:
 
 | Component | Source | Free? |
 |-----------|--------|-------|
-| Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed — one layout per salt |
+| Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed, one layout per salt |
 | XOR mask | `deriveMask(maskKey, wordPosition, maxIdx)` | ❌ Fixed |
 | Channel shift | `RGB_VALUE_SHIFTS[wordPosition]` | ❌ Fixed |
 | Channel permutation | Selected by `(R+G+B) % 6` | ❌ Derived |
@@ -83,11 +87,11 @@ Since each grid holds exactly one cell per word, the total is `blockSize ^ wordC
 
 Notes:
 
-- **Positions across salts** — the layout dimension only opens up when the salt changes, contributing up to
+- **Positions across salts**: the layout dimension only opens up when the salt changes, contributing up to
   `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
-- **Interactive preview** — the clickable color-space editor rejects any color matching the cell's current color or
+- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or
   an orthogonal neighbour, trimming at most 5 of 8,192 candidates per cell. The reduction is under 0.07%.
-- **No salt** — the grid is left in natural reading order and all masks are zero, but the per-word color count is
+- **No salt**: the grid is left in natural reading order and all masks are zero, but the per-word color count is
   unchanged.
 
 ---
@@ -176,7 +180,7 @@ run.bat
 
 `run.bat` creates `.venv/`, installs `requirements.txt`, verifies dependencies, and launches the app.
 
-To set it up by hand instead — required on Linux and macOS, where `run.bat` does not apply:
+To set it up on Linux and macOS, where `run.bat` does not apply:
 
 ```bash
 python -m venv .venv
@@ -254,7 +258,7 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 
 - **Salt** is processed with **Argon2id** (`time_cost`=4, `memory_cost`=256 MB) making brute-force infeasible.
 - All randomness for color offsets uses Python's `secrets` module (CSPRNG).
-- The salt is **not stored** anywhere — losing it means the image cannot be decoded.
+- The salt is **not stored** anywhere. Losing it means the image cannot be decoded.
 
 ---
 
@@ -269,10 +273,9 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 ## Contributing
 
 [`docs/ARCHITECTURE.md`](https://github.com/Enkhoder/Spicebag/blob/main/docs/ARCHITECTURE.md)
-maps the codebase layer by layer and documents the invariants that are not obvious from reading a
-single file — which randomness source the block offset must use, which tables are single-sourced,
-and where seed phrases are deliberately kept out of the log. Read it before changing anything in
-`spicebag/core/` or `spicebag/utils/colors.py`.
+maps the codebase layer-by-layer and documents the invariants that are not obvious from reading a
+single file, such as randomness source, single-sourced tables, and seed phrase handling in logs.
+Read it before changing anything in `spicebag/core/` or `spicebag/utils/colors.py`.
 
 ---
 
