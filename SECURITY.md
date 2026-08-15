@@ -12,7 +12,7 @@ Please include what you did, what happened, what you expected, and the versions 
 and Python involved. **NEVER INCLUDE A REAL SEED PHRASE!** Use one of the dummy phrases in
 [`examples/phrases/`](examples/phrases) or generate a throwaway.
 
-Expect an acknowledgement within a few days. Because this is a single-maintainer project,
+Expect an acknowledgment within a few days. Because this is a single-maintainer project,
 please allow reasonable time for a fix before public disclosure.
 
 ## What counts
