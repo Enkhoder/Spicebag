@@ -9,7 +9,7 @@ Use GitHub's private reporting: **Security → Report a vulnerability** on
 [the repository](https://github.com/Enkhoder/Spicebag/security/advisories/new).
 
 Please include what you did, what happened, what you expected, and the versions of Spicebag
-and Python involved. **Never include a real seed phrase** — use one of the dummy phrases in
+and Python involved. **NEVER INCLUDE A REAL SEED PHRASE!** Use one of the dummy phrases in
 [`examples/phrases/`](examples/phrases) or generate a throwaway.
 
 Expect an acknowledgement within a few days. Because this is a single-maintainer project,
@@ -35,13 +35,13 @@ The threat model is stated in the README and enforced by the warning screen at s
 Out of scope:
 
 - Malware, keyloggers, screen capture, or a compromised operating system. Spicebag offers no
-  protection against a machine that is already owned
+  protection against a machine that is already owned.
 - Anyone who can see your screen, your camera, or your keyboard
 - Losing the salt. It is never stored anywhere, by design, and an image encoded with a lost
-  salt is unrecoverable
-- Brute-forcing a weak salt. Argon2id raises the cost but cannot rescue a guessable passphrase
+  salt is unrecoverable.
+- Brute-forcing a weak salt. Argon2id raises the cost but cannot rescue a guessable passphrase.
 - Word lengths visible in the masked invalid-word notice. Only words absent from every
-  wordlist are shown that way, so they are typos rather than seed words
+  wordlist are shown that way, so they are typos rather than seed words.
 
 ## Releases
 
