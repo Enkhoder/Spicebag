@@ -528,7 +528,7 @@ class HelpScreen(Screen):
 
 
     def _enterMaskFreeze(self) -> None:
-        """Grace window expired: freeze the sample fully masked for one second
+        """Grace window expired: freeze the sample fully masked for two seconds
         before letting the reshuffle loop take over again."""
         self._graceTimer = None
         if self._imgColorSpace is None:
@@ -536,7 +536,7 @@ class HelpScreen(Screen):
 
         self._imgMasked = True
         self._imgPausedUntil = 0.0
-        self._maskTimer = self.set_timer(1.0, self._exitMaskFreeze)
+        self._maskTimer = self.set_timer(2.0, self._exitMaskFreeze)
         self._rebuild()
 
 
