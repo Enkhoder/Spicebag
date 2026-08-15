@@ -1,6 +1,7 @@
 ######## LIBRARIES ########
 
 from spicebag.constants.theme import (
+    invertedGradientHex,
     bannerGradientHex,
     GRID_SIZES,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
@@ -13,6 +14,7 @@ from textual.widgets import RichLog
 from textual.screen import Screen
 from rich.text import Text
 from textual import events
+import webbrowser
 import time
 
 
@@ -67,6 +69,7 @@ LICENSE_NAME = "Enkhoder"
 LICENSE_SEPARATOR = " · "
 LICENSE_SUFFIX = "Licensed under the MIT License."
 NAME_HOVER_TEXT = f" {LICENSE_NAME} "
+NAME_GITHUB_URL = f"https://github.com/{LICENSE_NAME}"
 RETURN_LINE = "Press any key to return to main menu."
 
 SEE_FILE_PATHS = [("See ", C_DIM), ("FILE PATHS", C_WHITE), (".", C_DIM)]
@@ -292,7 +295,7 @@ def licenseLine(hoverPhase: int) -> Text:
     for i, char in enumerate(NAME_HOVER_TEXT):
         p = (i - hoverPhase) % period
         colorIdx = p if p <= half else period - p
-        bgHex = bannerGradientHex(colorIdx / half)
+        bgHex = invertedGradientHex(colorIdx / half)
         text.append(char, style=f"bold reverse {bgHex}")
 
     text.append(LICENSE_SEPARATOR[2:] + LICENSE_SUFFIX, style=C_WHITE)
@@ -347,6 +350,10 @@ class HelpLog(RichLog):
             if seedHandler is not None:
                 seedHandler(wordIdx)
 
+            return
+
+        nameHandler = getattr(self.screen, "_handleNameClick", None)
+        if nameHandler is not None and nameHandler(line, col, event.ctrl):
             return
 
         handler = getattr(self.screen, "_handleSampleClick", None)
@@ -543,6 +550,12 @@ class HelpScreen(Screen):
         self._reshuffleAll()
         self._rebuild()
 
+        # Re-anchor the ambient reshuffle clock to this moment, so the next
+        # tick is a steady 1s away instead of wherever _imgTimer's on_mount
+        # phase happens to land.
+        self._stopTimer("_imgTimer")
+        self._imgTimer = self.set_interval(1.0, self._imgTick)
+
 
 
     ######## INTERACTIVE SAMPLE ########
@@ -645,6 +658,20 @@ class HelpScreen(Screen):
 
         self._namePhase = -1
         self._stopTimer("_nameTimer")
+        return True
+
+
+    def _handleNameClick(self, line: int, col: int, ctrlHeld: bool) -> bool:
+        """Ctrl+click on the author name opens their GitHub profile. Returns
+        whether the click landed on the name, so callers can swallow it either
+        way instead of falling through to the sample-click handler."""
+        region = self._nameRegion
+        if region is None or line != region[0] or not (region[1] <= col < region[2]):
+            return False
+
+        if ctrlHeld:
+            webbrowser.open(NAME_GITHUB_URL)
+
         return True
 
 
