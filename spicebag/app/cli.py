@@ -6,7 +6,7 @@ import typer
 
 ######## CLI SETUP ########
 
-app = typer.Typer(invoke_without_command=True)
+app = typer.Typer(invoke_without_command=True, add_completion=False, subcommand_metavar="")
 
 
 
@@ -19,9 +19,10 @@ def main():
     Run with no arguments to open the interface, which is the only way
     to encode or decode.
 
-    No subcommand accepts a seed phrase or a salt. A command argument
-    is written to the shell history and is readable from the process
-    list, and neither can be retracted afterwards.
+    Neither operation is reachable from the command line. A phrase or a
+    salt passed as an argument is written to the shell history and is
+    readable from the process list, and neither can be retracted
+    afterwards.
     """
     from spicebag.constants.theme import getVersion
     from spicebag.app.tui import SpicebagApp
