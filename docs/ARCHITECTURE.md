@@ -20,7 +20,7 @@ spicebag/
 │   ├── cli.py              Typer entry point
 │   ├── tui.py              SpicebagApp — Textual application root
 │   ├── tui.tcss            stylesheet (shipped as package data)
-│   ├── tree.py             RichLog tree rendering primitives
+│   ├── tree.py             tree rendering primitives, emits styled Text lines
 │   ├── screens/
 │   │   ├── warning.py      WarningScreen — 4-key security confirmation
 │   │   ├── main.py         MainScreen — the state machine
