@@ -47,8 +47,18 @@ spicebag/
 
 ### CLI — `app/cli.py`
 
-Typer app carrying a single callback, which launches the TUI. `pyproject.toml` exposes it as the
-`spicebag` console script through `[project.scripts]`.
+Typer app whose callback launches the TUI, alongside two eager flags: `--version` / `-V` prints the
+installed package version, and `--help` / `-h` prints the usage text. Both exit before the interface
+starts. `pyproject.toml` exposes the app as the `spicebag` console script through `[project.scripts]`.
+
+The `version` parameter on the callback is never read in its body. Typer registers the flag from the
+signature and the eager callback does the work, so it looks unused to a linter and must stay. The
+same applies to `ctx` in `SpicebagGroup.get_help`, which the Click signature requires.
+
+**The help output is hand-written.** `SpicebagGroup.get_help` returns the rendered `HELP_TEXT`
+constant in place of the table Typer would assemble, so Typer never sees the flag list. Adding or
+renaming a flag means editing `HELP_TEXT` by hand, or it will not appear in `--help`. Click still
+owns the help option itself, which is what keeps `Try 'spicebag --help' for help.` on usage errors.
 
 **No subcommand may accept a seed phrase or a salt.** An argument passed on the command line is
 recorded in the shell history file and is readable from the process list by any other process on the
