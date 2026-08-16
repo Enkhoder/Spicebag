@@ -1,29 +1,64 @@
 ######## LIBRARIES ########
 
+from typer.core import TyperGroup
+from rich.console import Console
 import typer
+import sys
 
 
 
 ######## CLI SETUP ########
 
-app = typer.Typer(invoke_without_command=True, add_completion=False, subcommand_metavar="")
+HELP_TEXT = (
+    "Run with no arguments (spicebag) to open the interface, which is the only way to encode or "
+    "decode. You cannot invoke either operation from the command line.\n"
+    "\n"
+    "Options:\n"
+    "\n"
+    "  --version  -V        Spicebag version\n"
+    "  --help     -h        Show this message\n"
+    "\n"
+    "(c) 2026 [link=https://github.com/Enkhoder]Enkhoder[/link]"
+)
+
+
+class SpicebagGroup(TyperGroup):
+    def get_help(self, ctx) -> str:
+        console = Console(highlight=False, force_terminal=sys.stdout.isatty())
+        with console.capture() as capture:
+            console.print(HELP_TEXT)
+
+        return capture.get().rstrip("\n")
+
+
+app = typer.Typer(
+    cls=SpicebagGroup,
+    invoke_without_command=True,
+    add_completion=False,
+    subcommand_metavar="",
+    context_settings={"help_option_names": ["--help", "-h"]}
+)
+
+
+
+######## FLAGS ########
+
+def versionCallback(value: bool) -> None:
+    if value:
+        from spicebag.constants.theme import getVersion
+
+        print(f"Spicebag {getVersion()}")
+
+        raise typer.Exit()
 
 
 
 ######## COMMANDS ########
 
 @app.callback()
-def main():
-    """Spicebag: Visual Mnemonic Encoder / Decoder
-
-    Run with no arguments to open the interface, which is the only way
-    to encode or decode.
-
-    Neither operation is reachable from the command line. A phrase or a
-    salt passed as an argument is written to the shell history and is
-    readable from the process list, and neither can be retracted
-    afterwards.
-    """
+def main(
+    version: bool = typer.Option(False, "--version", "-V", callback=versionCallback, is_eager=True)
+):
     from spicebag.constants.theme import getVersion
     from spicebag.app.tui import SpicebagApp
 
