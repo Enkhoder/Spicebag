@@ -1,7 +1,6 @@
 ######## LIBRARIES ########
 
 from spicebag.constants.theme import COMMANDS, CLIPBOARD_KEYS, AppState, blendHexColors
-from textual.widgets.input import Selection
 from textual.reactive import reactive
 from textual.widgets import Input
 from rich.segment import Segment
@@ -57,12 +56,6 @@ class SecureInput(Input):
 
         else:
             self._ghost = ""
-
-
-    def _resetSelection(self) -> None:
-        """Forcefully clear selection while preserving cursor position."""
-        if self.selection.start != self.selection.end:
-            self.selection = Selection(self.cursor_position, self.cursor_position)
 
 
     def on_paste(self, event: events.Paste) -> None:
