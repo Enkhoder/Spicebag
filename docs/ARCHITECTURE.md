@@ -47,13 +47,14 @@ spicebag/
 
 ### CLI — `app/cli.py`
 
-Typer app with `encode` and `decode` subcommands. With no subcommand it launches the TUI directly.
-`pyproject.toml` exposes it as the `spicebag` console script through `[project.scripts]`.
+Typer app carrying a single callback, which launches the TUI. `pyproject.toml` exposes it as the
+`spicebag` console script through `[project.scripts]`.
 
-Option names are **pinned explicitly**: `typer.Option(100, "--cell-px", ...)`. Do not rely on Typer
-deriving the flag from the parameter identifier — it lowercased `cellPx` to `--cellpx` in Typer 0.25
-and preserves it as `--cellPx` in 0.27, so an unpinned camelCase parameter produces a different flag
-depending on which version the user happens to install.
+**No subcommand may accept a seed phrase or a salt.** An argument passed on the command line is
+recorded in the shell history file and is readable from the process list by any other process on the
+machine, and the tool cannot retract either one afterwards. `encode` and `decode` subcommands existed
+through v1.0.0 and were removed for this reason. Adding a subcommand that takes secret material
+reintroduces the leak, so encoding and decoding stay behind the interactive interface.
 
 ### TUI — `app/tui.py`, `app/screens/`
 
@@ -200,6 +201,10 @@ words, takes the capture, and restores everything in a `finally`. `cleanSvg()` t
 
 `InvalidSeedWordsError` masks offending words as `·` characters, so word *lengths* leak but the words
 do not. This only applies to words absent from every wordlist — typos, not seed words.
+
+The same rule covers the process boundary: no secret may arrive as a command-line argument. See
+[CLI](#cli--appclipy) — the shell history file and the process list are outside the tool's control,
+which is why no subcommand accepts a phrase or a salt.
 
 ### `ASCII_ART_BANNER` has load-bearing trailing spaces
 

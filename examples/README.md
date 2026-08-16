@@ -37,7 +37,10 @@ Deliberately invalid images, kept as decoder regression cases:
 
 ## Usage
 
+Start the interface, type `decode`, and give it a path from the table above along with the matching
+salt. There is no command-line decode subcommand — a salt passed as an argument would be left behind
+in the shell history.
+
 ```bat
-run.bat decode examples/images/12-seedless.png
-run.bat decode examples/images/12-seed-Z3wjBTmDso1eLQ.png --salt Z3wjBTmDso1eLQ
+run.bat
 ```

@@ -19,7 +19,7 @@
 ## Features
 
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
-- **Decode** a color-coded PNG back into the original seed phrase, with optional `.txt` export.
+- **Decode** a color-coded PNG back into the original seed phrase.
 - **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation adds XOR masking and grid shuffling, making the image unreadable without the salt.
 - **Multi-standard support**:
 
@@ -165,8 +165,8 @@ argon2-cffi
 pip install spicebag
 ```
 
-This installs the `spicebag` command on your PATH. Run it with no arguments for the TUI, or pass a
-subcommand for one-shot use.
+This installs the `spicebag` command on your PATH. Run it with no arguments to open the TUI, which is
+the only interface to encoding and decoding.
 
 ### From source
 
@@ -220,30 +220,6 @@ Type a command at the prompt:
 
 The encode flow prompts in order for word count, phrase, salt, cell size, and save path, then shows
 a clickable color-space preview before writing the file.
-
-### Command line
-
-Pass a subcommand to skip the TUI entirely:
-
-```bash
-spicebag encode "<phrase>" <path> [--salt <s>] [--cell-px <n>]
-spicebag decode <path> [--salt <s>]
-```
-
-From a source checkout, substitute `run.bat` for `spicebag`.
-
-| Option | Default | Applies to | Meaning |
-|--------|---------|------------|---------|
-| `--salt` | *(empty)* | both | Passphrase for Argon2id key derivation |
-| `--cell-px` | `100` | encode | Pixel width of each square color cell |
-
-Try it against the sample images in
-[`examples/`](https://github.com/Enkhoder/Spicebag/tree/main/examples):
-
-```bash
-spicebag decode examples/images/12-seedless.png
-spicebag decode examples/images/12-seed-Z3wjBTmDso1eLQ.png --salt Z3wjBTmDso1eLQ
-```
 
 ### Output location
 
