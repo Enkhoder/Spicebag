@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_WHITE, C_IMG, AppState, OUTPUT_DIR
+from spicebag.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_IMG, AppState
 from spicebag.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
 from spicebag.app.handlers.savePath import parseSavePath
 from rich.style import Style
