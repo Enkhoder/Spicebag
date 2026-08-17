@@ -143,7 +143,55 @@ Every pixel within a single grid cell must be **exactly the same color**. Any va
 ## Requirements
 
 - Python 3.10+
-- A terminal with 24-bit color support (Windows Terminal, iTerm2, or any modern Linux terminal)
+- A terminal with 24-bit color support. See [Terminal](#terminal)
+
+### Terminal
+
+Spicebag draws a full-screen interface and leans on four terminal capabilities. Each one degrades on
+its own, so a terminal missing some of them still runs the app:
+
+| Capability | Used for | Without it |
+|---|---|---|
+| 24-bit color | Color-space grids, seed cells, gradients | Colors quantize to 256 and distinct cells can look identical |
+| Mouse reporting | Clicking a sample cell to reroll it, hover states | Unreachable; keyboard still works |
+| OSC 8 hyperlinks | Ctrl/Cmd-clicking a saved PNG or ZIP to open it | Filenames print as plain text; browse to `~/Spicebag` |
+| OSC 10/11/4 queries | Screenshots that match your real terminal colors | Screenshots fall back to a fixed dark palette |
+
+Every terminal below covers all four. The versions listed are where the full set is reliably present,
+not the oldest build that runs the app at all.
+
+| OS | Terminal | Minimum |
+|---|---|---|
+| Windows | Windows Terminal | 1.18 |
+| macOS | Ghostty | 1.0 |
+| macOS | iTerm2 | 3.4 |
+| Linux | Ghostty | 1.0 |
+| Linux | Kitty | 0.21 |
+| Linux | Konsole | 20.04 |
+| Linux | GNOME Terminal | VTE 0.50 |
+| Any | WezTerm | recent stable |
+| Any | Alacritty | 0.12 |
+
+On Windows, 1.18 is the release where Windows Terminal began answering palette queries. Earlier builds
+render identically but export screenshots against the fallback palette.
+
+**Known limitations.** Spicebag still runs on all of these. They cost comfort, not function:
+
+- **macOS Terminal.app** caps out at 256 colors. Gradients band and neighboring cells can render as the
+  same color, which matters because cell colors carry the encoded data. It also does not implement OSC 8,
+  so saved files are not clickable: Terminal.app linkifies literal URLs for <kbd>Cmd</kbd>-click, but
+  Spicebag shows the filename with the `file://` target behind it, leaving no visible URL to detect.
+  Use one of the macOS entries above instead.
+- **Windows legacy console host (`conhost.exe`)** handles 24-bit color but answers no palette queries,
+  so screenshots use the fallback. It has no OSC 8 support either, so <kbd>Ctrl</kbd>-clicking a saved
+  file does nothing. It also intercepts some control keys before the app sees them, which is why the
+  screenshot shortcut is <kbd>F12</kbd> rather than a Ctrl combination.
+- **tmux and screen** hide palette queries from the terminal underneath and need explicit configuration
+  for 24-bit color. Under tmux, set `terminal-features` for your terminal and enable `allow-passthrough`.
+
+Block glyphs (`█ ▀ ▂ ░`) and box-drawing characters are used throughout, so pick a monospace font that
+includes the Block Elements range. Cascadia Code, JetBrains Mono, Fira Code, and any Nerd Font patch
+all qualify.
 
 ### Dependencies
 
