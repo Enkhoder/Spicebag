@@ -2,6 +2,7 @@
 
 from typer.core import TyperGroup
 from rich.console import Console
+import platform
 import typer
 import sys
 
@@ -41,6 +42,21 @@ app = typer.Typer(
 
 
 
+######## TERMINAL TITLE ########
+
+def setTerminalTitle(title: str) -> None:
+    """Set the window title natively on Windows, where a legacy console prints OSC 0 literally."""
+    if platform.system() == "Windows":
+        import ctypes
+
+        ctypes.windll.kernel32.SetConsoleTitleW(title)
+        return
+
+    if sys.stdout.isatty():
+        print(f"\033]0;{title}\007", end="", flush=True)
+
+
+
 ######## FLAGS ########
 
 def versionCallback(value: bool) -> None:
@@ -63,7 +79,7 @@ def main(
     from spicebag.constants.theme import getVersion
     from spicebag.app.tui import SpicebagApp
 
-    print(f"\033]0;Spicebag v{getVersion()}\007", end="", flush=True)
+    setTerminalTitle(f"Spicebag v{getVersion()}")
     tuiApp = SpicebagApp(terminalTheme=probeTerminalTheme())
     tuiApp.run()
 
