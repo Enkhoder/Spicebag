@@ -1,18 +1,25 @@
 ######## LIBRARIES ########
 
 from spicebag.constants.theme import (
+    invertedGradientHex,
     bannerGradientHex,
     GRID_SIZES,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
+    SCREENSHOT_KEY,
 )
 from spicebag.core.generator import ColorSpace, precomputeColorSpace, rerollCell
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
+from textual.scroll_view import ScrollView
 from textual.app import ComposeResult
 from typing import Optional, Sequence
-from textual.widgets import RichLog
+from rich.console import Console
+from textual.geometry import Size
 from textual.screen import Screen
+from rich.segment import Segment
+from textual.strip import Strip
 from rich.text import Text
 from textual import events
+import webbrowser
 import time
 
 
@@ -64,9 +71,12 @@ HOW_THIS_WORKS_ROWS = [
 
 LICENSE_PREFIX = "(c) 2026 "
 LICENSE_NAME = "Enkhoder"
-LICENSE_SEPARATOR = " · "
+LICENSE_SEPARATOR = "  ·  "
 LICENSE_SUFFIX = "Licensed under the MIT License."
+LICENSE_HOVER_ACTION = "CTRL+click"
+LICENSE_HOVER_TAIL = " to view GitHub profile"
 NAME_HOVER_TEXT = f" {LICENSE_NAME} "
+NAME_GITHUB_URL = f"https://github.com/{LICENSE_NAME}"
 RETURN_LINE = "Press any key to return to main menu."
 
 SEE_FILE_PATHS = [("See ", C_DIM), ("FILE PATHS", C_WHITE), (".", C_DIM)]
@@ -78,7 +88,8 @@ COMMAND_ROWS = [
     ("banner", C_WHITE, "Toggle banner styles"),
     ("help",   C_SUCC,  "Open this guide"),
     ("exit",   C_FAIL,  "Close Spicebag"),
-    ("ESC",    C_WHITE, "Spicebag's back button"),
+    ("ESC",    C_DIM,   "Spicebag's back button"),
+    ("F12",    C_DIM,   "Take SVG screenshot, anywhere"),
 ]
 
 ENCODE_ROWS = [
@@ -92,7 +103,7 @@ ENCODE_ROWS = [
 ]
 
 ENCODE_PATH_ROWS = [
-    ("blank", C_DIM,
+    ("(blank)", C_DIM,
      [("Default Spicebag folder inside user home directory, default name", C_DIM)]),
     ("safe/image", C_INP,
      [("image", C_WHITE), (".png in folder safe", C_DIM)]),
@@ -118,7 +129,7 @@ ENCODE_PATH_ROWS = [
 ]
 
 DECODE_PATH_ROWS = [
-    ("blank", C_DIM,
+    ("(blank)", C_DIM,
      [("This one is not autofilled, you choose the image yourself", C_FAIL)]),
     ("safe/image.png", C_INP,
      [("Reads image.png inside folder safe", C_DIM)]),
@@ -274,10 +285,14 @@ def nameHoverFrameCount() -> int:
 
 
 def licenseLine(hoverPhase: int) -> Text:
-    """License credit, with the author name swept by the same reverse-video
-    gradient highlight the mascot banner title uses while hovered. The highlight
+    """License credit, with the author name swept by the same gradient
+    highlight the mascot banner title uses while hovered, and the suffix
+    swapped to a ctrl+click hint. The name text stays a fixed C_WHITE against
+    the moving gradient background, so it never blends with it. The highlight
     opens on the column the name starts at, so only the name slides one cell
-    right — its two pad cells are taken out of the separator that follows."""
+    right; the separator's leading space is kept in full (on top of the
+    name's own trailing pad), giving the dot one extra space of breathing
+    room while hovered."""
     text = Text(end="")
     if hoverPhase == -1:
         text.append(LICENSE_PREFIX, style=C_WHITE)
@@ -292,10 +307,12 @@ def licenseLine(hoverPhase: int) -> Text:
     for i, char in enumerate(NAME_HOVER_TEXT):
         p = (i - hoverPhase) % period
         colorIdx = p if p <= half else period - p
-        bgHex = bannerGradientHex(colorIdx / half)
-        text.append(char, style=f"bold reverse {bgHex}")
+        bgHex = invertedGradientHex(colorIdx / half)
+        text.append(char, style=f"bold {C_WHITE} on {bgHex}")
 
-    text.append(LICENSE_SEPARATOR[2:] + LICENSE_SUFFIX, style=C_WHITE)
+    text.append(LICENSE_SEPARATOR, style=C_WHITE)
+    text.append(LICENSE_HOVER_ACTION, style=C_WHITE)
+    text.append(LICENSE_HOVER_TAIL, style=C_DIM)
     return text
 
 
@@ -309,31 +326,100 @@ def gradientRule(width: int) -> Text:
     return text
 
 
-def buildBlocks(
-    colorSpace: Optional[ColorSpace],
-    masked: bool,
-    words: Sequence[str],
-    revealAll: bool,
-    hoverIdx: int,
-) -> list[RootNode]:
-    return [
-        _commandsBlock(),
-        _encodeBlock(colorSpace, masked),
-        _decodeBlock(words, revealAll, hoverIdx),
-        _filePathsBlock(),
-        _howThisWorksBlock(),
-    ]
-
 
 
 ######## CLICKABLE LOG ########
 
-class HelpLog(RichLog):
-    """RichLog that forwards cell clicks / hovers (in virtual content
-    coordinates) to the screen, so the encode sample can re-roll a tile and the
-    decode grid can reveal a word."""
+# Shared separator line. Reused rather than rebuilt so the two blank rows around
+# the license keep their identity between rebuilds, which is how the view tells
+# an unchanged line from a stale one.
+BLANK_STRIP = Strip.blank(0)
+
+
+def renderStrips(lines: Sequence[Text], console: Console) -> list[Strip]:
+    """Rasterize pre-wrapped lines into Strips, exactly one Strip per input line.
+
+    Every line the tree renderer emits is already wrapped to the target width and
+    carries no_wrap, so rendering each at its own cell length neither truncates
+    nor pads it. The 1:1 mapping is load-bearing: hover and click regions address
+    the document by line index, so a line that rasterized to two Strips (or none)
+    would silently shift every region below it."""
+    options = console.options.update(overflow="ignore", no_wrap=True)
+    out: list[Strip] = []
+
+    for line in lines:
+        segments = console.render(line, options.update_width(max(1, line.cell_len)))
+        strips = Strip.from_lines(list(Segment.split_lines(segments)))
+        out.append(strips[0] if strips else Strip.blank(0))
+
+    return out
+
+
+class HelpLog(ScrollView):
+    """Scrolling view over a pre-rasterized document, which forwards cell clicks
+    and hovers (in virtual content coordinates) to the screen so the encode
+    sample can re-roll a tile and the decode grid can reveal a word.
+
+    A RichLog stood here until the document outgrew it. RichLog only appends, so
+    every hover meant clearing it and re-writing all ~160 lines, and each write
+    re-measured its line and reassigned virtual_size — 47ms per hover, which is
+    what made the cursor stutter. Holding the Strips instead lets the screen swap
+    in only the lines that changed."""
 
     ALLOW_SELECT = False
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._strips: list[Strip] = []
+        self._lineCache: dict[tuple[int, int, int], Strip] = {}
+
+
+    def setLines(self, strips: list[Strip], widest: int) -> None:
+        """Swap in a new document, dropping only the cropped lines that moved.
+
+        The screen hands back the identical Strip objects for every section it
+        did not rebuild, so identity is enough to tell which lines are stale. A
+        hover changes about ten of them, and the rest stay cropped and ready."""
+        previous = self._strips
+
+        if len(previous) != len(strips):
+            self._lineCache.clear()
+
+        else:
+            stale = {i for i, (old, new) in enumerate(zip(previous, strips)) if old is not new}
+            for key in [key for key in self._lineCache if key[0] in stale]:
+                del self._lineCache[key]
+
+        self._strips = strips
+        self.virtual_size = Size(widest, len(strips))
+        self.refresh()
+
+
+    def notify_style_update(self) -> None:
+        self._lineCache.clear()
+        super().notify_style_update()
+
+
+    def render_line(self, y: int) -> Strip:
+        scrollX, scrollY = self.scroll_offset
+        width = self.scrollable_content_region.width
+        idx = scrollY + y
+
+        key = (idx, scrollX, width)
+        cached = self._lineCache.get(key)
+        if cached is not None:
+            return cached
+
+        richStyle = self.rich_style
+        if 0 <= idx < len(self._strips):
+            strip = self._strips[idx].crop_extend(scrollX, scrollX + width, richStyle).apply_style(richStyle)
+
+        else:
+            strip = Strip.blank(width, richStyle)
+
+        self._lineCache[key] = strip
+        return strip
+
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
@@ -347,6 +433,10 @@ class HelpLog(RichLog):
             if seedHandler is not None:
                 seedHandler(wordIdx)
 
+            return
+
+        nameHandler = getattr(self.screen, "_handleNameClick", None)
+        if nameHandler is not None and nameHandler(line, col, event.ctrl):
             return
 
         handler = getattr(self.screen, "_handleSampleClick", None)
@@ -365,7 +455,7 @@ class HelpLog(RichLog):
         handler(line, col)
 
 
-    def on_leave(self, event: events.Leave) -> None:
+    def on_leave(self) -> None:
         handler = getattr(self.screen, "_clearWordHover", None)
         if handler is not None:
             handler()
@@ -376,7 +466,7 @@ class HelpLog(RichLog):
 
 class HelpScreen(Screen):
     """Self-contained, single-column guide shown over the menu. Any key returns,
-    leaving the menu underneath exactly as it was, except ctrl+s which takes an
+    leaving the menu underneath exactly as it was, except F12 which takes an
     unmasked screenshot without closing the guide. The encode sample and decode
     grid are live and behave like their real counterparts on the main menu."""
 
@@ -411,6 +501,7 @@ class HelpScreen(Screen):
         self._imgTimer = None
         self._imgPausedUntil = 0.0      # auto-reshuffle suspended until this time
         self._imgMasked = False         # frozen, fully masked beat after the grace window
+        self._imgRevision = 0           # bumped on every reroll, keys the sample's cache entry
         self._graceTimer = None
         self._maskTimer = None
         self._sampleStartLine = -1
@@ -428,9 +519,13 @@ class HelpScreen(Screen):
         self._nameTimer = None
         self._nameRegion: Optional[tuple[int, int, int]] = None
 
+        # Rasterized document, cached per section (see _section)
+        self._segCache: dict[str, tuple] = {}
+        self._cacheWidth = -1
+
 
     def compose(self) -> ComposeResult:
-        log = HelpLog(id="help-log", wrap=False, highlight=False, markup=False)
+        log = HelpLog(id="help-log")
         log.can_focus = False
         yield log
 
@@ -446,7 +541,7 @@ class HelpScreen(Screen):
         event.stop()
         event.prevent_default()
 
-        if event.key == "ctrl+s":
+        if event.key == SCREENSHOT_KEY:
             from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
             import os
             path = generateScreenshotPath()
@@ -476,7 +571,7 @@ class HelpScreen(Screen):
         self.app.pop_screen()
 
 
-    def on_resize(self, event: events.Resize) -> None:
+    def on_resize(self) -> None:
         if self.is_mounted:
             self._rebuild()
 
@@ -499,6 +594,8 @@ class HelpScreen(Screen):
         for (r, c) in list(cs.cellToWord.keys()):
             rerollCell(cs, r, c)
 
+        self._imgRevision += 1
+
 
     def _imgTick(self) -> None:
         """Reshuffle the entire image once a second, unless a recent click has
@@ -515,7 +612,7 @@ class HelpScreen(Screen):
 
 
     def _enterMaskFreeze(self) -> None:
-        """Grace window expired: freeze the sample fully masked for one second
+        """Grace window expired: freeze the sample fully masked for two seconds
         before letting the reshuffle loop take over again."""
         self._graceTimer = None
         if self._imgColorSpace is None:
@@ -523,18 +620,13 @@ class HelpScreen(Screen):
 
         self._imgMasked = True
         self._imgPausedUntil = 0.0
-        self._maskTimer = self.set_timer(1.0, self._exitMaskFreeze)
+        self._maskTimer = self.set_timer(2.0, self._exitMaskFreeze)
         self._rebuild()
 
 
     def _exitMaskFreeze(self) -> None:
-        # BUG: this reshuffle fires on the click-relative grace/mask timers, but
-        # _imgTimer keeps ticking on its own phase from on_mount and is never
-        # restarted here. The gap to the next ambient reshuffle can land anywhere
-        # from ~0s to just under 1s depending on when the click happened, instead
-        # of a steady 1s cadence. Cosmetic only, no functional impact — fix by
-        # stopping and recreating _imgTimer at the end of this method so the
-        # ambient clock re-anchors to the moment the sample becomes visible again.
+        """Masked beat over: reshuffle once and hand the sample back to the
+        ambient loop."""
         self._maskTimer = None
         self._imgMasked = False
         if self._imgColorSpace is None:
@@ -542,6 +634,12 @@ class HelpScreen(Screen):
 
         self._reshuffleAll()
         self._rebuild()
+
+        # Re-anchor the ambient reshuffle clock to this moment, so the next
+        # tick is a steady 1s away instead of wherever _imgTimer's on_mount
+        # phase happens to land.
+        self._stopTimer("_imgTimer")
+        self._imgTimer = self.set_interval(1.0, self._imgTick)
 
 
 
@@ -565,6 +663,7 @@ class HelpScreen(Screen):
         if not rerollCell(cs, rowOff // 3, colOff // 6):
             return
 
+        self._imgRevision += 1
         self._imgPausedUntil = time.time() + 3.0
         self._stopTimer("_graceTimer")
         self._graceTimer = self.set_timer(3.0, self._enterMaskFreeze)
@@ -648,6 +747,20 @@ class HelpScreen(Screen):
         return True
 
 
+    def _handleNameClick(self, line: int, col: int, ctrlHeld: bool) -> bool:
+        """Ctrl+click on the author name opens their GitHub profile. Returns
+        whether the click landed on the name, so callers can swallow it either
+        way instead of falling through to the sample-click handler."""
+        region = self._nameRegion
+        if region is None or line != region[0] or not (region[1] <= col < region[2]):
+            return False
+
+        if ctrlHeld:
+            webbrowser.open(NAME_GITHUB_URL)
+
+        return True
+
+
     def _nameTick(self) -> None:
         self._nameTimer = None
         if self._namePhase == -1:
@@ -663,7 +776,7 @@ class HelpScreen(Screen):
 
     def _logWidth(self) -> int:
         try:
-            w = self.query_one("#help-log", RichLog).size.width
+            w = self.query_one("#help-log", HelpLog).size.width
 
         except Exception:
             w = 0
@@ -680,24 +793,85 @@ class HelpScreen(Screen):
             lines.append(wrapped)
 
 
-    def _composeLines(self, width: int) -> list:
-        lines: list = [gradientRule(width)]
-        for i, paragraph in enumerate(PROSE):
-            if i > 0:
-                lines.append(Text(""))
+    def _section(self, name: str, key: tuple, build):
+        """Rasterize a section of the document once per distinct key.
 
-            self._prose(lines, paragraph, width)
+        Most of the page — the command list, the path tables, the closing prose —
+        depends on nothing but the width, so a hover that only repaints one word
+        of the decode grid must not re-wrap and re-rasterize all of it. Sections
+        that do change carry their mutable state in the key: the encode sample on
+        a reroll counter, the decode grid on its reveal/hover indices, the license
+        line on the gradient phase."""
+        cached = self._segCache.get(name)
+        if cached is not None and cached[0] == key:
+            return cached[1]
 
-        blocks = buildBlocks(
-            self._imgColorSpace,
-            self._imgMasked,
-            self._words,
-            self._seedRevealAll,
-            self._seedHoverIdx,
+        value = build()
+        self._segCache[name] = (key, value)
+        return value
+
+
+    def _blockSection(self, name: str, key: tuple, makeRoot, width: int):
+        """Cache one tree block as (strips, sampleHit, hoverRegions), with the two
+        region lists still relative to the block's own first line."""
+        def build():
+            console = self.app.console
+            lines, sampleHit, hoverRegions = renderBlocks([makeRoot()], width, console)
+            return renderStrips(lines, console), sampleHit, hoverRegions
+
+        return self._section(name, key, build)
+
+
+    def _licenseSection(self, width: int):
+        """Cache the license line as (strips, plains). The plain strings are kept
+        because the name's hot zone is located by searching the rendered text."""
+        def build():
+            console = self.app.console
+            lines = list(licenseLine(self._namePhase).wrap(console, max(1, width)))
+            return renderStrips(lines, console), [line.plain for line in lines]
+
+        return self._section("license", (width, self._namePhase), build)
+
+
+    def _headSection(self, width: int) -> list[Strip]:
+        def build():
+            lines: list = [gradientRule(width)]
+            for i, paragraph in enumerate(PROSE):
+                if i > 0:
+                    lines.append(Text(""))
+
+                self._prose(lines, paragraph, width)
+
+            return renderStrips(lines, self.app.console)
+
+        return self._section("head", (width,), build)
+
+
+    def _footSection(self, width: int) -> list[Strip]:
+        def build():
+            lines: list = []
+            self._prose(lines, RETURN_LINE, width, C_DIM)
+
+            return renderStrips(lines, self.app.console)
+
+        return self._section("foot", (width,), build)
+
+
+    def _composeStrips(self, width: int) -> list[Strip]:
+        """Assemble the whole document from its cached sections, re-deriving the
+        click and hover geometry as each section lands at its final offset."""
+        strips: list[Strip] = list(self._headSection(width))
+
+        strips.extend(self._blockSection("commands", (width,), _commandsBlock, width)[0])
+
+        offset = len(strips)
+        sampleStrips, sampleHit, _ = self._blockSection(
+            "encode",
+            (width, self._imgMasked, self._imgRevision),
+            lambda: _encodeBlock(self._imgColorSpace, self._imgMasked),
+            width,
         )
-        blockLines, sampleHit, hoverRegions = renderBlocks(blocks, width, self.app.console)
-        offset = len(lines)
-        lines.extend(blockLines)
+        strips.extend(sampleStrips)
 
         if sampleHit is not None:
             firstBlockLine, blockCol, cols, rows = sampleHit
@@ -709,47 +883,61 @@ class HelpScreen(Screen):
         else:
             self._sampleStartLine = -1
 
+        offset = len(strips)
+        gridStrips, _, hoverRegions = self._blockSection(
+            "decode",
+            (width, self._seedRevealAll, self._seedHoverIdx),
+            lambda: _decodeBlock(self._words, self._seedRevealAll, self._seedHoverIdx),
+            width,
+        )
+        strips.extend(gridStrips)
+
         self._hoverRegions = [
             (lineIdx + offset, colStart, colEnd, wordIdx)
             for (lineIdx, colStart, colEnd, _, wordIdx) in hoverRegions
         ]
 
-        lines.append(Text(""))
-        licenseStart = len(lines)
-        for wrapped in licenseLine(self._namePhase).wrap(self.app.console, max(1, width)):
-            lines.append(wrapped)
+        strips.extend(self._blockSection("paths", (width,), _filePathsBlock, width)[0])
+        strips.extend(self._blockSection("works", (width,), _howThisWorksBlock, width)[0])
+
+        strips.append(BLANK_STRIP)
+        offset = len(strips)
+        licenseStrips, licensePlains = self._licenseSection(width)
+        strips.extend(licenseStrips)
 
         # Anchor the hot zone on the highlight block, not the name, so it stays
         # put while the hovered name sits one cell to the right.
         self._nameRegion = None
-        for idx in range(licenseStart, len(lines)):
-            hit = lines[idx].plain.find(LICENSE_NAME)
+        for i, plain in enumerate(licensePlains):
+            hit = plain.find(LICENSE_NAME)
             if hit >= 0:
                 start = hit - 1 if self._namePhase != -1 else hit
-                self._nameRegion = (idx, start, start + len(NAME_HOVER_TEXT))
+                self._nameRegion = (offset + i, start, start + len(NAME_HOVER_TEXT))
                 break
 
-        lines.append(Text(""))
+        strips.append(BLANK_STRIP)
+        strips.extend(self._footSection(width))
 
-        self._prose(lines, RETURN_LINE, width, C_DIM)
-
-        return lines
+        return strips
 
 
     def _rebuild(self) -> None:
         try:
-            log = self.query_one("#help-log", RichLog)
+            log = self.query_one("#help-log", HelpLog)
 
         except Exception:
             return
 
+        width = self._logWidth()
+        if width != self._cacheWidth:
+            # Every section is wrapped to the width, so a resize invalidates all
+            # of them at once.
+            self._segCache.clear()
+            self._cacheWidth = width
+
         prevY = log.scroll_offset.y
-        lines = self._composeLines(self._logWidth())
+        strips = self._composeStrips(width)
+        widest = max((strip.cell_length for strip in strips), default=0)
 
-        with self.app.batch_update():
-            log.auto_scroll = False
-            log.clear()
-            for line in lines:
-                log.write(line)
-
+        log.setLines(strips, widest)
         log.scroll_to(y=prevY, animate=False)

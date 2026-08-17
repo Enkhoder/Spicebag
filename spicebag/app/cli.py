@@ -1,66 +1,82 @@
 ######## LIBRARIES ########
 
+from typer.core import TyperGroup
+import platform
 import typer
+import sys
 
 
 
 ######## CLI SETUP ########
 
-app = typer.Typer(invoke_without_command=True)
+HELP_TEXT = (
+    "\n"
+    "Usage: spicebag [option]\n"
+    "\n"
+    "Run with no arguments to open the interface, which is the only way to encode and decode.\n"
+    "\n"
+    "Options:\n"
+    "  --version  -V        Spicebag version\n"
+    "  --help     -h        Show this message"
+    "\n"
+)
+
+
+class SpicebagGroup(TyperGroup):
+    def get_help(self, ctx) -> str:
+        return HELP_TEXT
+
+
+app = typer.Typer(
+    cls=SpicebagGroup,
+    invoke_without_command=True,
+    add_completion=False,
+    subcommand_metavar="",
+    context_settings={"help_option_names": ["--help", "-h"]}
+)
+
+
+
+######## TERMINAL TITLE ########
+
+def setTerminalTitle(title: str) -> None:
+    """Set the window title natively on Windows, where a legacy console prints OSC 0 literally."""
+    if platform.system() == "Windows":
+        import ctypes
+
+        ctypes.windll.kernel32.SetConsoleTitleW(title)
+        return
+
+    if sys.stdout.isatty():
+        print(f"\033]0;{title}\007", end="", flush=True)
+
+
+
+######## FLAGS ########
+
+def versionCallback(value: bool) -> None:
+    if value:
+        from spicebag.constants.theme import getVersion
+
+        print(f"Spicebag {getVersion()}")
+
+        raise typer.Exit()
 
 
 
 ######## COMMANDS ########
 
 @app.callback()
-def main(ctx: typer.Context):
-    """Spicebag: Visual Mnemonic Encoder / Decoder"""
-    if ctx.invoked_subcommand is None:
-        from spicebag.constants.theme import getVersion
-        from spicebag.app.tui import SpicebagApp
-
-        print(f"\033]0;Spicebag v{getVersion()}\007", end="", flush=True)
-        tuiApp = SpicebagApp()
-        tuiApp.run()
-
-
-@app.command()
-def encode(
-    mnemonic: str = typer.Argument(..., help="The seed phrase to encode"),
-    path: str = typer.Argument(..., help="Path to save the PNG file"),
-    salt: str = typer.Option("", help="Optional salt for encryption"),
-    cellPx: int = typer.Option(100, "--cell-px", help="Size of each color cell in pixels")
+def main(
+    version: bool = typer.Option(False, "--version", "-V", callback=versionCallback, is_eager=True)
 ):
-    """Encode a seed phrase into a color-coded PNG."""
-    from spicebag.core.generator import encodeMnemonic
+    from spicebag.utils.terminalColors import probeTerminalTheme
+    from spicebag.constants.theme import getVersion
+    from spicebag.app.tui import SpicebagApp
 
-    try:
-        encodeMnemonic(mnemonic, path, cellPx=cellPx, salt=salt)
-        typer.secho(f"Successfully encoded to {path}", fg=typer.colors.GREEN)
-
-    except Exception as e:
-        typer.secho(f"Encoding failed: {e}", fg=typer.colors.RED)
-
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def decode(
-    path: str = typer.Argument(..., help="Path to the PNG file to decode"),
-    salt: str = typer.Option("", help="Optional salt used during encryption")
-):
-    """Decode a color-coded PNG back into a seed phrase."""
-    from spicebag.core.decoder import decodeImage
-
-    try:
-        mnemonic, _ = decodeImage(path, salt=salt)
-        typer.secho("\nDecoded Seed Phrase:", fg=typer.colors.GREEN)
-        typer.echo(mnemonic)
-
-    except Exception as e:
-        typer.secho(f"Decoding failed: {e}", fg=typer.colors.RED)
-
-        raise typer.Exit(code=1)
+    setTerminalTitle(f"Spicebag v{getVersion()}")
+    tuiApp = SpicebagApp(terminalTheme=probeTerminalTheme())
+    tuiApp.run()
 
 
 

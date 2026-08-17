@@ -1,7 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.constants.theme import COMMANDS, CLIPBOARD_KEYS, AppState, blendHexColors
-from textual.widgets.input import Selection
+from spicebag.constants.theme import COMMANDS, CLIPBOARD_KEYS, SCREENSHOT_KEY, AppState, blendHexColors
 from textual.reactive import reactive
 from textual.widgets import Input
 from rich.segment import Segment
@@ -57,12 +56,6 @@ class SecureInput(Input):
 
         else:
             self._ghost = ""
-
-
-    def _resetSelection(self) -> None:
-        """Forcefully clear selection while preserving cursor position."""
-        if self.selection.start != self.selection.end:
-            self.selection = Selection(self.cursor_position, self.cursor_position)
 
 
     def on_paste(self, event: events.Paste) -> None:
@@ -179,7 +172,7 @@ class SecureInput(Input):
         state = getattr(self.screen, "_state", None) if hasattr(self.screen, "_state") else None
 
         if state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM, AppState.BANNER_CONFIRM):
-            if event.key not in ("enter", "escape", "ctrl+s"):
+            if event.key not in ("enter", "escape", SCREENSHOT_KEY):
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
 

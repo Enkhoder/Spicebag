@@ -15,7 +15,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "1.0.0"
+        return "2.0.0"
 
 
 
@@ -202,6 +202,8 @@ CLIPBOARD_KEYS = frozenset({
     "ctrl+shift+home", "ctrl+shift+end",
     "cmd+c", "cmd+x", "cmd+v", "cmd+a",
 })
+
+SCREENSHOT_KEY = "f12"
 
 
 

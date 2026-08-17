@@ -40,8 +40,19 @@ jobs:
         run: |
           python -m venv /tmp/verify
           /tmp/verify/bin/python -m pip install --quiet dist/*.whl
-          /tmp/verify/bin/spicebag decode examples/images/24-seedless.png
-          /tmp/verify/bin/spicebag decode examples/images/12-seed-Z3wjBTmDso1eLQ.png --salt Z3wjBTmDso1eLQ
+          /tmp/verify/bin/spicebag --help
+          /tmp/verify/bin/python - <<'PY'
+          from spicebag.core.decoder import decodeImage
+
+          cases = [
+              ("examples/images/24-seedless.png", ""),
+              ("examples/images/12-seed-Z3wjBTmDso1eLQ.png", "Z3wjBTmDso1eLQ"),
+          ]
+
+          for path, salt in cases:
+              mnemonic, standard = decodeImage(path, salt=salt)
+              print(f"{path}: {standard}, {len(mnemonic.split())} words")
+          PY
 
       - uses: actions/upload-artifact@v5
         with:

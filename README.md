@@ -12,15 +12,18 @@
   <a href="https://github.com/Enkhoder/Spicebag/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Enkhoder/Spicebag?style=for-the-badge&color=909090" alt="License"></a>
 </p>
 
-**Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed, and can be optionally encrypted with a user-provided salt.
+**Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back.
+Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually
+represents the seed, and can be optionally encrypted with a user-provided salt.
 
 ---
 
 ## Features
 
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
-- **Decode** a color-coded PNG back into the original seed phrase, with optional `.txt` export.
-- **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation adds XOR masking and grid shuffling, making the image unreadable without the salt.
+- **Decode** a color-coded PNG back into the original seed phrase.
+- **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation adds XOR
+  masking and grid shuffling, making the image unreadable without the salt.
 - **Multi-standard support**:
 
   | Standard | Word Counts | Wordlist Size |
@@ -29,7 +32,8 @@
   | Electrum | 12, 24 | 2048 |
   | SLIP-39  | 20, 33 | 1024 |
 
-- **PNG integrity checks**: rejects images with forbidden chunks (e.g. `PLTE`, `tRNS`, `iCCP`) and verifies cell-level monochromatic consistency to detect lossy compression.
+- **PNG integrity checks**: rejects images with forbidden chunks (e.g. `PLTE`, `tRNS`, `iCCP`) and verifies
+  cell-level monochromatic consistency to detect lossy compression.
 - **Checksum validation** on decode ensures the recovered mnemonic is valid before output.
 
 ---
@@ -37,9 +41,12 @@
 ## How It Works
 
 1. **Word → Index**: Each seed word is looked up in its standard's wordlist.
-2. **XOR Masking**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into subkeys. A per-word mask is computed and XORed with the word index.
-3. **Index → RGB**: The masked index is packed into a 24-bit value, split into R/G/B channels, shifted by a per-word constant, and the channels are permuted.
-4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
+2. **XOR Masking**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into subkeys. A
+   per-word mask is computed and XORed with the word index.
+3. **Index → RGB**: The masked index is packed into a 24-bit value, split into R/G/B channels, shifted by a
+   per-word constant, and the channels are permuted.
+4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4
+   for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
 5. **Decoding**: reverses all steps: un-permute, un-shift, un-mask, and look up the word by index.
 
 ---
@@ -114,7 +121,8 @@ The image's width-to-height ratio determines the grid size and expected word cou
 | 2:3 | 4 × 6 | 24 | BIP-39, Electrum |
 | 3:11 | 3 × 11 | 33 | SLIP-39 |
 
-Image dimensions must be evenly divisible by their grid's column and row count (i.e. every cell must be the same whole-pixel size).
+Image dimensions must be evenly divisible by their grid's column and row count (i.e. every cell must be the
+same whole-pixel size).
 
 ### PNG Chunks
 
@@ -123,12 +131,15 @@ Image dimensions must be evenly divisible by their grid's column and row count (
 | ❌ Forbidden | `PLTE`, `tRNS`, `bKGD`, `sBIT`, `iCCP` |
 | ✅ Allowed | Everything else, including `IHDR`, `IDAT`, `IEND`, `tIME`, `tEXt`, `iTXt`, `zTXt`, `sRGB`, `gAMA`, `pHYs` |
 
-Validation is a blocklist, not an allowlist: any forbidden chunk causes immediate rejection, and every other chunk type passes. This ensures the image uses a direct RGB color model with no palette, transparency, or embedded ICC profile.
+Validation is a blocklist, not an allowlist: any forbidden chunk causes immediate rejection, and every other
+chunk type passes. This ensures the image uses a direct RGB color model with no palette, transparency, or
+embedded ICC profile.
 
 ### Color Mode
 
 - Must be **RGB** (3 channels) or **RGBA** (4 channels) with alpha fixed at `255`.
-- **Bit Depth**: Varying bit depths are acceptable only if they are semantically/exactly identical to standard 8-bit channels upon extraction.
+- **Bit Depth**: Varying bit depths are acceptable only if they are semantically/exactly identical to standard
+  8-bit channels upon extraction.
 - **Strictly Prohibited**:
   - Custom color models or color profiles (e.g., **Adobe RGB**).
   - **Monochromatic** / Grayscale images.
@@ -136,14 +147,63 @@ Validation is a blocklist, not an allowlist: any forbidden chunk causes immediat
 
 ### Cell Integrity
 
-Every pixel within a single grid cell must be **exactly the same color**. Any variation (e.g. from JPEG re-compression, anti-aliasing, or screenshot artifacts) will fail validation.
+Every pixel within a single grid cell must be **exactly the same color**. Any variation (e.g. from JPEG
+re-compression, anti-aliasing, or screenshot artifacts) will fail validation.
 
 ---
 
 ## Requirements
 
 - Python 3.10+
-- A terminal with 24-bit color support (Windows Terminal, iTerm2, or any modern Linux terminal)
+- A terminal with 24-bit color support. See [Terminal](#terminal)
+
+### Terminal
+
+Spicebag draws a full-screen interface and leans on four terminal capabilities. Each one degrades on
+its own, so a terminal missing some of them still runs the app:
+
+| Capability | Used for | Without it |
+|---|---|---|
+| 24-bit color | Color-space grids, seed cells, gradients | Colors quantize to 256 and distinct cells can look identical |
+| Mouse reporting | Clicking a sample cell to reroll it, hover states | Unreachable; keyboard still works |
+| OSC 8 hyperlinks | Ctrl/Cmd-clicking a saved PNG or ZIP to open it | Filenames print as plain text; browse to `~/Spicebag` |
+| OSC 10/11/4 queries | Screenshots that match your real terminal colors | Screenshots fall back to a fixed dark palette |
+
+Every terminal below covers all four. The versions listed are where the full set is reliably present,
+not the oldest build that runs the app at all.
+
+| OS | Terminal | Minimum |
+|---|---|---|
+| Windows | Windows Terminal | 1.18 |
+| macOS | Ghostty | 1.0 |
+| macOS | iTerm2 | 3.4 |
+| Linux | Ghostty | 1.0 |
+| Linux | Kitty | 0.21 |
+| Linux | Konsole | 20.04 |
+| Linux | GNOME Terminal | VTE 0.50 |
+| Any | WezTerm | recent stable |
+| Any | Alacritty | 0.12 |
+
+On Windows, 1.18 is the release where Windows Terminal began answering palette queries. Earlier builds
+render identically but export screenshots against the fallback palette.
+
+**Known limitations.** Spicebag still runs on all of these. They cost comfort, not function:
+
+- **macOS Terminal.app** caps out at 256 colors. Gradients band and neighboring cells can render as the
+  same color, which matters because cell colors carry the encoded data. It also does not implement OSC 8,
+  so saved files are not clickable: Terminal.app linkifies literal URLs for <kbd>Cmd</kbd>-click, but
+  Spicebag shows the filename with the `file://` target behind it, leaving no visible URL to detect.
+  Use one of the macOS entries above instead.
+- **Windows legacy console host (`conhost.exe`)** handles 24-bit color but answers no palette queries,
+  so screenshots use the fallback. It has no OSC 8 support either, so <kbd>Ctrl</kbd>-clicking a saved
+  file does nothing. It also intercepts some control keys before the app sees them, which is why the
+  screenshot shortcut is <kbd>F12</kbd> rather than a Ctrl combination.
+- **tmux and screen** hide palette queries from the terminal underneath and need explicit configuration
+  for 24-bit color. Under tmux, set `terminal-features` for your terminal and enable `allow-passthrough`.
+
+Block glyphs (`█ ▀ ▂ ░`) and box-drawing characters are used throughout, so pick a monospace font that
+includes the Block Elements range. Cascadia Code, JetBrains Mono, Fira Code, and any Nerd Font patch
+all qualify.
 
 ### Dependencies
 
@@ -165,8 +225,8 @@ argon2-cffi
 pip install spicebag
 ```
 
-This installs the `spicebag` command on your PATH. Run it with no arguments for the TUI, or pass a
-subcommand for one-shot use.
+This installs the `spicebag` command on your PATH. Run it with no arguments to open the TUI, which is
+the only interface to encoding and decoding.
 
 ### From source
 
@@ -221,30 +281,6 @@ Type a command at the prompt:
 The encode flow prompts in order for word count, phrase, salt, cell size, and save path, then shows
 a clickable color-space preview before writing the file.
 
-### Command line
-
-Pass a subcommand to skip the TUI entirely:
-
-```bash
-spicebag encode "<phrase>" <path> [--salt <s>] [--cell-px <n>]
-spicebag decode <path> [--salt <s>]
-```
-
-From a source checkout, substitute `run.bat` for `spicebag`.
-
-| Option | Default | Applies to | Meaning |
-|--------|---------|------------|---------|
-| `--salt` | *(empty)* | both | Passphrase for Argon2id key derivation |
-| `--cell-px` | `100` | encode | Pixel width of each square color cell |
-
-Try it against the sample images in
-[`examples/`](https://github.com/Enkhoder/Spicebag/tree/main/examples):
-
-```bash
-spicebag decode examples/images/12-seedless.png
-spicebag decode examples/images/12-seed-Z3wjBTmDso1eLQ.png --salt Z3wjBTmDso1eLQ
-```
-
 ### Output location
 
 Images, ZIP archives, screenshots, and the banner preference file are written to `~/Spicebag/`.
@@ -254,7 +290,8 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 ## Security Considerations
 
 > [!CAUTION]
-> Spicebag provides **no protection** against malware, keyloggers, screen capture, coercion, or any form of surveillance. Use it only in a secure, private environment.
+> Spicebag provides **no protection** against malware, keyloggers, screen capture, coercion, or any form of
+> surveillance. Use it only in a secure, private environment.
 
 - **Salt** is processed with **Argon2id** (`time_cost`=4, `memory_cost`=256 MB) making brute-force infeasible.
 - All randomness for color offsets uses Python's `secrets` module (CSPRNG).
@@ -264,9 +301,14 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 
 ## Performance & Bulk Generation
 
-- **Algorithmic Separation**: Bulk image generation (`bulkEncodeMnemonic`) decouples the color space calculations from the resolution upscaling. This minimizes memory overhead during logic generation.
-- **Strictly Unique Colors**: Offsets for cells are sampled without replacement using `secrets.SystemRandom().sample` (out of the 8192 available colors for BIP-39) to mathematically guarantee that all bulk-generated images use unique cell colors.
-- **Optimized PNG Encoding**: High-resolution cell scaling (e.g. 2000px per cell) processes massive amounts of pixel data. The bulk encoder uses a fast compression level (`compress_level=1`) to yield a ~43% execution speedup, dropping bulk generation times significantly.
+- **Algorithmic Separation**: Bulk image generation (`bulkEncodeMnemonic`) decouples the color space
+  calculations from the resolution upscaling. This minimizes memory overhead during logic generation.
+- **Strictly Unique Colors**: Offsets for cells are sampled without replacement using
+  `secrets.SystemRandom().sample` (out of the 8192 available colors for BIP-39) to mathematically guarantee
+  that all bulk-generated images use unique cell colors.
+- **Optimized PNG Encoding**: High-resolution cell scaling (e.g. 2000px per cell) processes massive amounts of
+  pixel data. The bulk encoder uses a fast compression level (`compress_level=1`) to yield a ~43% execution
+  speedup, dropping bulk generation times significantly.
 
 ---
 

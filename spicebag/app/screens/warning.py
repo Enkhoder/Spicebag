@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.constants.theme import C_WHITE, C_INP, C_FAIL, C_SUCC, gradientColor
+from spicebag.constants.theme import C_WHITE, C_INP, C_FAIL, C_SUCC, SCREENSHOT_KEY, gradientColor
 from textual.containers import Vertical
 from textual.app import ComposeResult
 from textual.reactive import reactive
@@ -164,7 +164,7 @@ class WarningScreen(Screen):
 
 
     def on_key(self, event: events.Key) -> None:
-        if event.key == "ctrl+s":
+        if event.key == SCREENSHOT_KEY:
             from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
             import os
             path = generateScreenshotPath()

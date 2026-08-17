@@ -20,7 +20,7 @@ spicebag/
 │   ├── cli.py              Typer entry point
 │   ├── tui.py              SpicebagApp — Textual application root
 │   ├── tui.tcss            stylesheet (shipped as package data)
-│   ├── tree.py             RichLog tree rendering primitives
+│   ├── tree.py             tree rendering primitives, emits styled Text lines
 │   ├── screens/
 │   │   ├── warning.py      WarningScreen — 4-key security confirmation
 │   │   ├── main.py         MainScreen — the state machine
@@ -39,6 +39,7 @@ spicebag/
 ├── utils/
 │   ├── colors.py           key derivation and the colour transform
 │   ├── networkDetect.py    per-OS connection state, packet-free
+│   ├── terminalColors.py   live terminal palette probe, per-OS
 │   └── dependencyCheck.py  requirements.txt check for the run.bat path
 └── constants/
     ├── defaults.py         wordlists, standards, PNG and colour tables
@@ -47,13 +48,26 @@ spicebag/
 
 ### CLI — `app/cli.py`
 
-Typer app with `encode` and `decode` subcommands. With no subcommand it launches the TUI directly.
-`pyproject.toml` exposes it as the `spicebag` console script through `[project.scripts]`.
+Typer app whose callback launches the TUI, alongside two eager flags: `--version` / `-V` prints the
+installed package version, and `--help` / `-h` prints the usage text. Both exit before the interface
+starts. `pyproject.toml` exposes the app as the `spicebag` console script through `[project.scripts]`.
 
-Option names are **pinned explicitly**: `typer.Option(100, "--cell-px", ...)`. Do not rely on Typer
-deriving the flag from the parameter identifier — it lowercased `cellPx` to `--cellpx` in Typer 0.25
-and preserves it as `--cellPx` in 0.27, so an unpinned camelCase parameter produces a different flag
-depending on which version the user happens to install.
+The `version` parameter on the callback is never read in its body. Typer registers the flag from the
+signature and the eager callback does the work, so it looks unused to a linter and must stay. The
+same applies to `ctx` in `SpicebagGroup.get_help`, which the Click signature requires.
+
+**The help output is hand-written.** `SpicebagGroup.get_help` returns the `HELP_TEXT` constant
+verbatim in place of the table Typer would assemble, so Typer never sees the flag list. It is
+returned as a plain string rather than rendered through Rich, which keeps the literal spacing at any
+terminal width and leaves the bracketed metavariable alone instead of parsing it as markup. Adding or
+renaming a flag means editing `HELP_TEXT` by hand, or it will not appear in `--help`. Click still
+owns the help option itself, which is what keeps `Try 'spicebag --help' for help.` on usage errors.
+
+**No subcommand may accept a seed phrase or a salt.** An argument passed on the command line is
+recorded in the shell history file and is readable from the process list by any other process on the
+machine, and the tool cannot retract either one afterwards. `encode` and `decode` subcommands existed
+through v1.0.0 and were removed for this reason. Adding a subcommand that takes secret material
+reintroduces the leak, so encoding and decoding stay behind the interactive interface.
 
 ### TUI — `app/tui.py`, `app/screens/`
 
@@ -108,6 +122,16 @@ Windows uses `GetAdaptersAddresses` + `GetIfEntry2` and `Bthprops.cpl`; Linux re
 and `/sys/class/rfkill`; macOS reads the Bluetooth plist and shells out to `networksetup`/`ifconfig`.
 `MainScreen` polls it on a daemon thread — blocking on `NotifyAddrChange` on Windows, on a 2-second
 sleep elsewhere — to keep the connection indicator live. The macOS path is untested on real hardware.
+
+`terminalColors.py` resolves the terminal's real palette, so an exported screenshot matches what was
+on screen. It queries OSC 11, OSC 10 and OSC 4 for the background, the foreground and the sixteen
+ANSI slots, reading the replies in raw mode under a short deadline. Two details are load-bearing: the
+probe runs from `cli.py` **before** the app starts, because Textual owns stdin once it does; and the
+reader counts terminated replies, then drains whatever is left, because a reply cut mid-sequence
+leaks its tail into the first keypress the app sees. A terminal that does not answer falls back to
+the `HKCU\Console` color table on Windows, then to a fixed dark theme identical to Textual's
+`MONOKAI`, so a silent terminal reproduces the pre-2.0.0 output exactly. The POSIX reader is untested
+on real hardware.
 
 `dependencyCheck.py` is only meaningful on the source checkout; it no-ops when `requirements.txt` is
 absent, which is the case for an installed package.
@@ -198,8 +222,18 @@ Screenshot export (`handlers/screenshot.py`) blanks the input, masks the sample 
 words, takes the capture, and restores everything in a `finally`. `cleanSvg()` then strips
 `<title>`, `<desc>`, `<metadata>` and comments from the SVG.
 
+The capture goes through the local `exportScreenshot()` rather than Textual's
+`App.export_screenshot`, which hardcodes the export theme. Passing the probed terminal palette
+through to `export_svg` is what lets the frame and the body carry the real terminal background
+instead of Rich's fixed `#292929`, so `cleanSvg()` recolors from that palette rather than guessing
+at it. See `utils/terminalColors.py`.
+
 `InvalidSeedWordsError` masks offending words as `·` characters, so word *lengths* leak but the words
 do not. This only applies to words absent from every wordlist — typos, not seed words.
+
+The same rule covers the process boundary: no secret may arrive as a command-line argument. See
+[CLI](#cli--appclipy) — the shell history file and the process list are outside the tool's control,
+which is why no subcommand accepts a phrase or a salt.
 
 ### `ASCII_ART_BANNER` has load-bearing trailing spaces
 

@@ -45,9 +45,7 @@ jobs:
         run: python tests/smoke.py
 
       - name: Installed console script
-        run: |
-          spicebag decode examples/images/24-seedless.png
-          spicebag decode examples/images/33-seed-XjpJxIjOiPQ94DR.png --salt XjpJxIjOiPQ94DR
+        run: spicebag --help
 
   package:
     name: Build and check artifacts
