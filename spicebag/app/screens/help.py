@@ -88,7 +88,8 @@ COMMAND_ROWS = [
     ("banner", C_WHITE, "Toggle banner styles"),
     ("help",   C_SUCC,  "Open this guide"),
     ("exit",   C_FAIL,  "Close Spicebag"),
-    ("ESC",    C_WHITE, "Spicebag's back button"),
+    ("ESC",    C_DIM,   "Spicebag's back button"),
+    ("F12",    C_DIM,   "Take SVG screenshot, anywhere"),
 ]
 
 ENCODE_ROWS = [
