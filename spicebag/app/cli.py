@@ -1,7 +1,6 @@
 ######## LIBRARIES ########
 
 from typer.core import TyperGroup
-from rich.console import Console
 import platform
 import typer
 import sys
@@ -11,25 +10,21 @@ import sys
 ######## CLI SETUP ########
 
 HELP_TEXT = (
-    "Run with no arguments (spicebag) to open the interface, which is the only way to encode or "
-    "decode. You cannot invoke either operation from the command line.\n"
+    "\n"
+    "Usage: spicebag [option]\n"
+    "\n"
+    "Run with no arguments to open the interface, which is the only way to encode and decode.\n"
     "\n"
     "Options:\n"
-    "\n"
     "  --version  -V        Spicebag version\n"
-    "  --help     -h        Show this message\n"
+    "  --help     -h        Show this message"
     "\n"
-    "(c) 2026 [link=https://github.com/Enkhoder]Enkhoder[/link]"
 )
 
 
 class SpicebagGroup(TyperGroup):
     def get_help(self, ctx) -> str:
-        console = Console(highlight=False, force_terminal=sys.stdout.isatty())
-        with console.capture() as capture:
-            console.print(HELP_TEXT)
-
-        return capture.get().rstrip("\n")
+        return HELP_TEXT
 
 
 app = typer.Typer(
