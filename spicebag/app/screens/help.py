@@ -455,7 +455,7 @@ class HelpLog(ScrollView):
         handler(line, col)
 
 
-    def on_leave(self, event: events.Leave) -> None:
+    def on_leave(self) -> None:
         handler = getattr(self.screen, "_clearWordHover", None)
         if handler is not None:
             handler()
@@ -571,7 +571,7 @@ class HelpScreen(Screen):
         self.app.pop_screen()
 
 
-    def on_resize(self, event: events.Resize) -> None:
+    def on_resize(self) -> None:
         if self.is_mounted:
             self._rebuild()
 
