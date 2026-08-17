@@ -5,6 +5,7 @@ from spicebag.constants.theme import (
     bannerGradientHex,
     GRID_SIZES,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
+    SCREENSHOT_KEY,
 )
 from spicebag.core.generator import ColorSpace, precomputeColorSpace, rerollCell
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
@@ -464,7 +465,7 @@ class HelpLog(ScrollView):
 
 class HelpScreen(Screen):
     """Self-contained, single-column guide shown over the menu. Any key returns,
-    leaving the menu underneath exactly as it was, except ctrl+s which takes an
+    leaving the menu underneath exactly as it was, except F12 which takes an
     unmasked screenshot without closing the guide. The encode sample and decode
     grid are live and behave like their real counterparts on the main menu."""
 
@@ -539,7 +540,7 @@ class HelpScreen(Screen):
         event.stop()
         event.prevent_default()
 
-        if event.key == "ctrl+s":
+        if event.key == SCREENSHOT_KEY:
             from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
             import os
             path = generateScreenshotPath()

@@ -203,6 +203,8 @@ CLIPBOARD_KEYS = frozenset({
     "cmd+c", "cmd+x", "cmd+v", "cmd+a",
 })
 
+SCREENSHOT_KEY = "f12"
+
 
 
 ######## WORKFLOW STATE ########

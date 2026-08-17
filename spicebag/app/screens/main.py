@@ -3,7 +3,8 @@
 from spicebag.constants.theme import (
     COMMANDS, WORD_COUNTS, GRID_SIZES, BANNER_META, AppState, G_START, G_END,
     C_BG, C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
-    blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER, bannerHoverFrameCount
+    blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER, bannerHoverFrameCount,
+    SCREENSHOT_KEY
 )
 import json
 
@@ -76,7 +77,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     can_focus = False
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
-        ("ctrl+s", "printSvg", "Screenshot")
+        (SCREENSHOT_KEY, "printSvg", "Screenshot")
     ]
 
     _wordCountFlashRatio = reactive(0.0)
@@ -1139,7 +1140,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._rebuild()
             return
 
-        # CTRL+S at the idle main menu — merge consecutive shots into one block.
+        # F12 at the idle main menu — merge consecutive shots into one block.
         def _objFileNode(name: str) -> TreeNode:
             node = self._fileNode(name, "app-screenshots")
             node.connStyle = C_IMG
