@@ -2,7 +2,9 @@
 
 from spicebag.constants.theme import CLIPBOARD_KEYS, C_BG
 from spicebag.app.widgets.secureInput import SecureInput
+from spicebag.utils.terminalColors import FALLBACK_THEME
 from spicebag.app.screens.warning import WarningScreen
+from rich.terminal_theme import TerminalTheme
 from textual.app import App
 from textual import events
 
@@ -15,11 +17,18 @@ class SpicebagApp(App):
 
     CSS_PATH = "tui.tcss"
 
+    def __init__(self, terminalTheme: TerminalTheme | None = None) -> None:
+        super().__init__()
+        self.terminalTheme = terminalTheme or FALLBACK_THEME
+
+
     def get_css_variables(self) -> dict[str, str]:
         return {**super().get_css_variables(), "bg": C_BG}
 
 
     def on_mount(self) -> None:
+        self.ansi_theme_dark = self.terminalTheme
+        self.ansi_theme_light = self.terminalTheme
         self.push_screen(WarningScreen())
 
 

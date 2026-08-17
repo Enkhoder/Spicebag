@@ -59,11 +59,12 @@ def versionCallback(value: bool) -> None:
 def main(
     version: bool = typer.Option(False, "--version", "-V", callback=versionCallback, is_eager=True)
 ):
+    from spicebag.utils.terminalColors import probeTerminalTheme
     from spicebag.constants.theme import getVersion
     from spicebag.app.tui import SpicebagApp
 
     print(f"\033]0;Spicebag v{getVersion()}\007", end="", flush=True)
-    tuiApp = SpicebagApp()
+    tuiApp = SpicebagApp(terminalTheme=probeTerminalTheme())
     tuiApp.run()
 
 
