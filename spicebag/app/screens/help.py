@@ -103,7 +103,7 @@ ENCODE_ROWS = [
 ]
 
 ENCODE_PATH_ROWS = [
-    ("blank", C_DIM,
+    ("(blank)", C_DIM,
      [("Default Spicebag folder inside user home directory, default name", C_DIM)]),
     ("safe/image", C_INP,
      [("image", C_WHITE), (".png in folder safe", C_DIM)]),
@@ -129,7 +129,7 @@ ENCODE_PATH_ROWS = [
 ]
 
 DECODE_PATH_ROWS = [
-    ("blank", C_DIM,
+    ("(blank)", C_DIM,
      [("This one is not autofilled, you choose the image yourself", C_FAIL)]),
     ("safe/image.png", C_INP,
      [("Reads image.png inside folder safe", C_DIM)]),
