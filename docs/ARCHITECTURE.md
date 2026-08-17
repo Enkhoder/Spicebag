@@ -39,6 +39,7 @@ spicebag/
 ├── utils/
 │   ├── colors.py           key derivation and the colour transform
 │   ├── networkDetect.py    per-OS connection state, packet-free
+│   ├── terminalColors.py   live terminal palette probe, per-OS
 │   └── dependencyCheck.py  requirements.txt check for the run.bat path
 └── constants/
     ├── defaults.py         wordlists, standards, PNG and colour tables
@@ -55,8 +56,10 @@ The `version` parameter on the callback is never read in its body. Typer registe
 signature and the eager callback does the work, so it looks unused to a linter and must stay. The
 same applies to `ctx` in `SpicebagGroup.get_help`, which the Click signature requires.
 
-**The help output is hand-written.** `SpicebagGroup.get_help` returns the rendered `HELP_TEXT`
-constant in place of the table Typer would assemble, so Typer never sees the flag list. Adding or
+**The help output is hand-written.** `SpicebagGroup.get_help` returns the `HELP_TEXT` constant
+verbatim in place of the table Typer would assemble, so Typer never sees the flag list. It is
+returned as a plain string rather than rendered through Rich, which keeps the literal spacing at any
+terminal width and leaves the bracketed metavariable alone instead of parsing it as markup. Adding or
 renaming a flag means editing `HELP_TEXT` by hand, or it will not appear in `--help`. Click still
 owns the help option itself, which is what keeps `Try 'spicebag --help' for help.` on usage errors.
 
@@ -119,6 +122,16 @@ Windows uses `GetAdaptersAddresses` + `GetIfEntry2` and `Bthprops.cpl`; Linux re
 and `/sys/class/rfkill`; macOS reads the Bluetooth plist and shells out to `networksetup`/`ifconfig`.
 `MainScreen` polls it on a daemon thread — blocking on `NotifyAddrChange` on Windows, on a 2-second
 sleep elsewhere — to keep the connection indicator live. The macOS path is untested on real hardware.
+
+`terminalColors.py` resolves the terminal's real palette, so an exported screenshot matches what was
+on screen. It queries OSC 11, OSC 10 and OSC 4 for the background, the foreground and the sixteen
+ANSI slots, reading the replies in raw mode under a short deadline. Two details are load-bearing: the
+probe runs from `cli.py` **before** the app starts, because Textual owns stdin once it does; and the
+reader counts terminated replies, then drains whatever is left, because a reply cut mid-sequence
+leaks its tail into the first keypress the app sees. A terminal that does not answer falls back to
+the `HKCU\Console` color table on Windows, then to a fixed dark theme identical to Textual's
+`MONOKAI`, so a silent terminal reproduces the pre-2.0.0 output exactly. The POSIX reader is untested
+on real hardware.
 
 `dependencyCheck.py` is only meaningful on the source checkout; it no-ops when `requirements.txt` is
 absent, which is the case for an installed package.
@@ -208,6 +221,12 @@ size and fixed strings. The status bar only reports whether a salt is present, n
 Screenshot export (`handlers/screenshot.py`) blanks the input, masks the sample grid and any decoded
 words, takes the capture, and restores everything in a `finally`. `cleanSvg()` then strips
 `<title>`, `<desc>`, `<metadata>` and comments from the SVG.
+
+The capture goes through the local `exportScreenshot()` rather than Textual's
+`App.export_screenshot`, which hardcodes the export theme. Passing the probed terminal palette
+through to `export_svg` is what lets the frame and the body carry the real terminal background
+instead of Rich's fixed `#292929`, so `cleanSvg()` recolors from that palette rather than guessing
+at it. See `utils/terminalColors.py`.
 
 `InvalidSeedWordsError` masks offending words as `·` characters, so word *lengths* leak but the words
 do not. This only applies to words absent from every wordlist — typos, not seed words.

@@ -1140,7 +1140,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._rebuild()
             return
 
-        # F12 at the idle main menu — merge consecutive shots into one block.
+        # F12 at the idle main menu: merge consecutive shots into one block.
         def _objFileNode(name: str) -> TreeNode:
             node = self._fileNode(name, "app-screenshots")
             node.connStyle = C_IMG

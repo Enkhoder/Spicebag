@@ -66,7 +66,7 @@ The code that branches on platform, and therefore carries the most risk:
   has never run. The Windows half and the fallback theme are covered.
 - **`app/cli.py`**: `setTerminalTitle` falls back to an OSC 0 escape sequence off Windows.
 - **`utils/networkDetect.py`**: the Linux `/sys/class/net` and `rfkill` reads, and the macOS
-  inference path, are both unverified.
+  `networksetup` and `ifconfig` shell-outs plus the Bluetooth plist read, are unverified.
 
 Each of these degrades to a safe default rather than raising, so a failure should cost a single
 feature rather than the session. Reports from macOS and Linux users are the fastest way to close
