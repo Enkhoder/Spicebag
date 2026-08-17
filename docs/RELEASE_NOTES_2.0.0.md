@@ -50,15 +50,17 @@ Windows, legacy `conhost.exe` answers no queries and is read from its console co
 
 ### Platform testing
 
-> **This release was verified on Windows only.** macOS and Linux have not had in-depth QC for
-> v2.0.0. Nothing here is known to be broken on either. The platform-specific paths simply have not
-> been exercised on real hardware, so treat them as unverified rather than as supported.
+> **The encoding core is covered on all three platforms. The interface is verified on Windows only.**
+> CI runs the encode and decode round trip on Linux, Windows and macOS for every change, so the
+> cryptography and the PNG path are exercised everywhere. What CI cannot drive is a full-screen
+> interface, and what it never touches is the per-OS probing code. Nothing below is known to be
+> broken; treat it as unverified rather than as unsupported.
 
 | OS | Status |
 |---|---|
-| Windows 11 | Verified on Windows Terminal and legacy `conhost.exe` |
-| macOS | Exercised only in a VMware guest, which does not reliably reflect real hardware |
-| Linux | Not exercised |
+| Windows 11 | Fully exercised: interface, screenshots, Windows Terminal and legacy `conhost.exe` |
+| macOS | Core green in CI; interface exercised only in a VMware guest, never on real hardware |
+| Linux | Core green in CI; interface not exercised |
 
 The code that branches on platform, and therefore carries the most risk:
 
