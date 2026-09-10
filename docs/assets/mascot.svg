@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <title>Spicebag mascot</title>
+  <g shape-rendering="crispEdges">
+    <rect x="96" y="100" width="16" height="8" fill="#945321"/>
+    <rect x="112" y="100" width="16" height="8" fill="#BF8C54"/>
+    <rect x="144" y="100" width="16" height="8" fill="#BF8C54"/>
+    <rect x="176" y="100" width="16" height="8" fill="#BF8C54"/>
+    <rect x="208" y="100" width="16" height="8" fill="#BF8C54"/>
+    <rect x="96" y="108" width="16" height="32" fill="#945321"/>
+    <rect x="112" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="128" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="144" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="160" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="176" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="192" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="208" y="108" width="16" height="32" fill="#BF8C54"/>
+    <rect x="80" y="140" width="16" height="32" fill="#CEB430"/>
+    <rect x="96" y="140" width="16" height="32" fill="#CFA435"/>
+    <rect x="112" y="140" width="16" height="32" fill="#D09539"/>
+    <rect x="128" y="140" width="16" height="32" fill="#D1873E"/>
+    <rect x="144" y="140" width="16" height="32" fill="#D27A42"/>
+    <rect x="160" y="140" width="16" height="32" fill="#2C91B8"/>
+    <rect x="176" y="140" width="16" height="32" fill="#2A9DB4"/>
+    <rect x="192" y="140" width="16" height="32" fill="#29A8AF"/>
+    <rect x="208" y="140" width="16" height="32" fill="#28AAA3"/>
+    <rect x="224" y="140" width="16" height="32" fill="#27A691"/>
+    <rect x="80" y="172" width="16" height="32" fill="#CEB430"/>
+    <rect x="96" y="172" width="16" height="32" fill="#CFA435"/>
+    <rect x="112" y="172" width="16" height="32" fill="#D09539"/>
+    <rect x="128" y="172" width="16" height="32" fill="#D1873E"/>
+    <rect x="144" y="172" width="16" height="32" fill="#D27A42"/>
+    <rect x="160" y="172" width="16" height="32" fill="#2C91B8"/>
+    <rect x="176" y="172" width="16" height="32" fill="#2A9DB4"/>
+    <rect x="192" y="172" width="16" height="32" fill="#29A8AF"/>
+    <rect x="208" y="172" width="16" height="32" fill="#28AAA3"/>
+    <rect x="224" y="172" width="16" height="32" fill="#27A691"/>
+    <rect x="96" y="204" width="16" height="16" fill="#945321"/>
+    <rect x="112" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="128" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="144" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="160" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="176" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="192" y="204" width="16" height="16" fill="#BF8C54"/>
+    <rect x="208" y="204" width="16" height="16" fill="#BF8C54"/>
+  </g>
+</svg>
