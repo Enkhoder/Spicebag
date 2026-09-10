@@ -12,6 +12,10 @@
   <a href="https://github.com/Enkhoder/Spicebag/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Enkhoder/Spicebag?style=for-the-badge&color=909090" alt="License"></a>
 </p>
 
+<p align="center">
+  <a href="https://www.producthunt.com/products/spicebag?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-spicebag" target="_blank" rel="noopener noreferrer"><img alt="Spicebag - Compress crypto seed phrases into secure visual artifacts. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1246937&amp;theme=light&amp;t=1789065380333"></a>
+</p>
+
 **Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back.
 Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually
 represents the seed, and can be optionally encrypted with a user-provided salt.
