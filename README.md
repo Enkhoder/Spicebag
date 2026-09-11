@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="Spicebag">
+  <img src="docs/assets/readme-banner.svg" alt="Spicebag">
 </p>
 
 <p align="center"><strong>Visual Mnemonic Encoder / Decoder</strong></p>
