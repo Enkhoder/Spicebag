@@ -1,10 +1,7 @@
 ######## LIBRARIES ########
 
-from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, encodeWord, computeBlockSize
-from spicebag.constants.defaults import (
-    SEED_TYPE_STANDARDS,
-    RGB_VALUE_SHIFTS
-)
+from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, encodeWord, computeBlockSize
+from spicebag.constants.defaults import SEED_TYPE_STANDARDS
 from spicebag.constants.theme import GRID_SIZES
 from dataclasses import dataclass, field
 from PIL import Image
@@ -129,21 +126,21 @@ def encodeMnemonic(
     cols, rows = GRID_SIZES[wordCount]
 
     if precomputed is not None:
-        maskKey, rngSeed = precomputed
+        colorTables, rngSeed = precomputed
 
     elif salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey = deriveSubkeys(masterKey)
+        colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
         if progressCallback:
             progressCallback(0.01)
 
     else:
-        maskKey = None
+        colorTables = None
         rngSeed = None
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
 
@@ -162,17 +159,13 @@ def encodeMnemonic(
 
     for i in range(wordCount):
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
-
-        wordMask = deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0
-        currentShift = RGB_VALUE_SHIFTS[i]
+            raise InterruptedError("Canceled")
 
         color = encodeWord(
             indices[i],
-            mask=wordMask,
-            shift=currentShift,
             maxIndex=maxIdx,
-            offset=wordOffsets[i]
+            offset=wordOffsets[i],
+            colorTables=colorTables
         )
 
         r, c = allCoords[i]
@@ -182,7 +175,7 @@ def encodeMnemonic(
             progressCallback((i + 1) / wordCount * 0.9)
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     resizedImg = img.resize((cols * cellPx, rows * cellPx), Image.Resampling.NEAREST)
     resizedImg.save(imgPath, format="PNG", optimize=False, compress_level=1)
@@ -197,14 +190,14 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
 
     if salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey = deriveSubkeys(masterKey)
+        colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
         if progressCallback:
             progressCallback(1 / (count + 1))
 
     else:
-        maskKey = None
+        colorTables = None
         rngSeed = None
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
@@ -227,7 +220,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
 
     for i in range(count):
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
         img = Image.new("RGB", (cols, rows))
 
@@ -237,16 +230,13 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             raise ValueError("Failed to initialize image pixel access.")
 
         for wIdx in range(wordCount):
-            wordMask = deriveMask(maskKey, wIdx, maxIdx) if maskKey is not None else 0
-            currentShift = RGB_VALUE_SHIFTS[wIdx]
             offset = wordOffsets[wIdx][i]
 
             color = encodeWord(
                 indices[wIdx],
-                mask=wordMask,
-                shift=currentShift,
                 maxIndex=maxIdx,
-                offset=offset
+                offset=offset,
+                colorTables=colorTables
             )
 
             r, c = allCoords[wIdx]
@@ -257,7 +247,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
     with zipfile.ZipFile(zipPath, "w", compression=zipfile.ZIP_STORED) as zipf:
         for i, img in enumerate(tinyImages):
             if cancelCheck and cancelCheck():
-                raise InterruptedError("Cancelled")
+                raise InterruptedError("Canceled")
 
             resizedImg = img.resize((cols * cellPx, rows * cellPx), Image.Resampling.NEAREST)
             imgByteArr = io.BytesIO()
@@ -285,8 +275,7 @@ class ColorSpace:
     maxIdx: int
     blockSize: int
     indices: list
-    masks: list
-    shifts: list
+    colorTables: list | None
     cellToWord: dict = field(default_factory=dict)
     offsets: dict = field(default_factory=dict)
     colorRGB: dict = field(default_factory=dict)
@@ -298,18 +287,18 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
 
     if salt:
         masterKey = deriveMasterKey(salt)
-        maskKey, permKey = deriveSubkeys(masterKey)
+        colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
         if progressCallback:
             progressCallback(0.5)
 
     else:
-        maskKey = None
+        colorTables = None
         rngSeed = None
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
 
@@ -317,10 +306,8 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
         random.Random(rngSeed).shuffle(allCoords)
 
     blockSize = computeBlockSize(maxIdx)
-    masks = [deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0 for i in range(wordCount)]
-    shifts = [RGB_VALUE_SHIFTS[i] for i in range(wordCount)]
 
-    cs = ColorSpace(cols, rows, wordCount, maxIdx, blockSize, indices, masks, shifts)
+    cs = ColorSpace(cols, rows, wordCount, maxIdx, blockSize, indices, colorTables)
 
     rng = secrets.SystemRandom()
 
@@ -334,12 +321,12 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
                 forbidden.add(cs.colorRGB[(nr, nc)])
 
         offset = rng.randrange(blockSize)
-        color = encodeWord(indices[i], mask=masks[i], shift=shifts[i], maxIndex=maxIdx, offset=offset)
+        color = encodeWord(indices[i], maxIndex=maxIdx, offset=offset, colorTables=colorTables)
         tries = 0
 
         while color in forbidden and tries < 256:
             offset = rng.randrange(blockSize)
-            color = encodeWord(indices[i], mask=masks[i], shift=shifts[i], maxIndex=maxIdx, offset=offset)
+            color = encodeWord(indices[i], maxIndex=maxIdx, offset=offset, colorTables=colorTables)
             tries += 1
 
         cs.offsets[(r, c)] = offset
@@ -363,11 +350,11 @@ def rerollCell(cs, r, c):
             forbidden.add(cs.colorRGB[(nr, nc)])
 
     offset = secrets.SystemRandom().randrange(cs.blockSize)
-    color = encodeWord(cs.indices[i], mask=cs.masks[i], shift=cs.shifts[i], maxIndex=cs.maxIdx, offset=offset)
+    color = encodeWord(cs.indices[i], maxIndex=cs.maxIdx, offset=offset, colorTables=cs.colorTables)
 
     while color in forbidden:
         offset = (offset + 1) % cs.blockSize
-        color = encodeWord(cs.indices[i], mask=cs.masks[i], shift=cs.shifts[i], maxIndex=cs.maxIdx, offset=offset)
+        color = encodeWord(cs.indices[i], maxIndex=cs.maxIdx, offset=offset, colorTables=cs.colorTables)
 
     cs.offsets[(r, c)] = offset
     cs.colorRGB[(r, c)] = color
@@ -383,7 +370,7 @@ def renderColorSpaceToFile(cs, imgPath, cellPx=100, cancelCheck=None, progressCa
 
     for (r, c), color in cs.colorRGB.items():
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
         px[c, r] = color
 
@@ -391,7 +378,7 @@ def renderColorSpaceToFile(cs, imgPath, cellPx=100, cancelCheck=None, progressCa
         progressCallback(0.5)
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     resizedImg = img.resize((cs.cols * cellPx, cs.rows * cellPx), Image.Resampling.NEAREST)
     resizedImg.save(imgPath, format="PNG", optimize=False, compress_level=1)

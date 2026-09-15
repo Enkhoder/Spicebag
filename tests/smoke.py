@@ -5,6 +5,8 @@ asserts that salted encodes stay non-deterministic, and confirms the deliberatel
 fixtures still fail. Exits non-zero on the first failure.
 """
 
+
+
 ######## LIBRARIES ########
 
 from spicebag.core.generator import encodeMnemonic, bulkEncodeMnemonic, identifySeedType

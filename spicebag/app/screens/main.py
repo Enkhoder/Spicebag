@@ -6,8 +6,6 @@ from spicebag.constants.theme import (
     blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER, bannerHoverFrameCount,
     SCREENSHOT_KEY
 )
-import json
-
 from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
 from spicebag.app.handlers.decode import DecodeHandlerMixin
@@ -25,6 +23,7 @@ from rich.style import Style
 from rich.text import Text
 import colorsys
 import asyncio
+import json
 import time
 
 
@@ -84,9 +83,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     def __init__(self) -> None:
         self._state = AppState.IDLE
-        self._words: list[str] = []
         self._wordCount = 0
-        self._currentWordIdx = 0
         self._encodeSalt = ""
         self._encodePhrase = ""
         self._encodeSeedType = ""
@@ -629,7 +626,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def _addInvalidWordsNote(self, words: list[str], prefix: str = "") -> None:
-
         if self._curStep is not None:
             node = TreeNode(
                 kind="invalidnote", words=list(words), prefixMsg=prefix,
@@ -1498,9 +1494,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state == AppState.ENCODE_COUNT:
             self._addAnswer("Operation aborted.", f"bold {C_FAIL}", connStyle=C_FAIL)
-            self._words = []
             self._wordCount = 0
-            self._currentWordIdx = 0
             self._encodeSalt = ""
             self._encodePhrase = ""
             self._encodeCount = 1
@@ -1551,8 +1545,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
             elif self._state == AppState.ENCODE_PHRASE:
                 self._wordCount = 0
-                self._words = []
-                self._currentWordIdx = 0
                 self._encodePhrase = ""
                 self._encodeSeedType = ""
 
@@ -1756,7 +1748,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             if self._curRoot is not None:
                 self._curRoot.bullet = C_FAIL
 
-            self._addStep(f"[bold {C_FAIL}]Unrecognized command: {displayCmd}[/]", connStyle=C_FAIL)
+            self._addStep(f"[bold {C_FAIL}]No such command: {displayCmd}[/]", connStyle=C_FAIL)
             self._curRoot = None
             self._curStep = None
             self._tabIndex = -1

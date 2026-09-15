@@ -9,14 +9,13 @@ Plain-text dummy mnemonics, one per supported word count.
 | File | Words | Standard |
 |------|-------|----------|
 | `12-word-phrase.txt` | 12 | Electrum |
-| `20-word-phrase.txt` | 20 | SLIP-39 |
-| `24-word-phrase.txt` | 24 | BIP-39 |
-| `33-word-phrase.txt` | 33 | SLIP-39 |
+| `20-word-phrase.txt` | 20 | SLIP39 |
+| `24-word-phrase.txt` | 24 | BIP39 |
+| `33-word-phrase.txt` | 33 | SLIP39 |
 
 ## `images/`
 
-Encoded PNGs. **The filename carries the salt** — do not rename these files, or they become
-undecodable.
+Encoded PNGs. **The filename carries the salt**: do not rename these files, or they become undecodable.
 
 | File | Salt |
 |------|------|
@@ -37,9 +36,7 @@ Deliberately invalid images, kept as decoder regression cases:
 
 ## Usage
 
-Start the interface, type `decode`, and give it a path from the table above along with the matching
-salt. There is no command-line decode subcommand — a salt passed as an argument would be left behind
-in the shell history.
+Start the interface, type `decode`, and give it a path from the table above along with the matching salt. There is no command-line decode subcommand: a salt passed as an argument would be left behind in the shell history.
 
 ```bat
 run.bat

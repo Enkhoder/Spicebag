@@ -10,21 +10,36 @@ import sys
 ######## CLI SETUP ########
 
 HELP_TEXT = (
-    "\n"
     "Usage: spicebag [option]\n"
-    "\n"
     "Run with no arguments to open the interface, which is the only way to encode and decode.\n"
-    "\n"
     "Options:\n"
-    "  --version  -V        Spicebag version\n"
-    "  --help     -h        Show this message"
-    "\n"
+    "  --version, -V        Spicebag version\n"
+    "  --help,    -h        Show this message"
+)
+
+UNKNOWN_INPUT_TEXT = (
+    "No such {kind}: {token}\n"
+    "Help:\n"
+    "  spicebag --help\n"
+    "  spicebag -h"
 )
 
 
 class SpicebagGroup(TyperGroup):
     def get_help(self, ctx) -> str:
         return HELP_TEXT
+
+
+    def parse_args(self, ctx, args: list[str]) -> list[str]:
+        flags = {name for param in self.get_params(ctx) for name in param.opts}
+
+        for token in args:
+            if token not in flags:
+                kind = "option" if token.startswith("-") else "command"
+                print(UNKNOWN_INPUT_TEXT.format(kind=kind, token=token), file=sys.stderr)
+                raise typer.Exit(2)
+
+        return super().parse_args(ctx, args)
 
 
 app = typer.Typer(

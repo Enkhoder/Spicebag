@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.constants.defaults import PERMUTATIONS
+from spicebag.constants.defaults import FEISTEL_ROUNDS
 from argon2.low_level import hash_secret_raw, Type
 import hashlib
 import secrets
@@ -46,17 +46,40 @@ def deriveSubkeys(masterKey: bytes):
     """Expand the Argon2id master key into the two salt-derived secrets the encoding needs.
     Block offsets are deliberately absent: they are the encoding's only free variable and must
     come from secrets.SystemRandom(), never from the salt."""
-    maskKey = hkdfExpand(masterKey, b"maskDomain")
+    colorTables = deriveColorTables(hkdfExpand(masterKey, b"colorDomain"))
     permKey = hkdfExpand(masterKey, b"permDomain")
 
-    return maskKey, permKey
+    return colorTables, permKey
 
 
-def deriveMask(maskKey: bytes, index: int, maxIndex: int) -> int:
-    msg = index.to_bytes(4, "big")
-    digest = hmac.new(maskKey, msg, hashlib.sha512).digest()
+def deriveColorTables(colorKey: bytes) -> list[list[int]]:
+    """Precompute every Feistel round function output, one 4096-entry table per round, so a color
+    permutation costs table lookups instead of one HMAC per round."""
+    return [
+        [
+            int.from_bytes(hmac.digest(colorKey, bytes([roundIndex]) + half.to_bytes(2, "big"), "sha256")[:2], "big")
+            & 0xFFF
+            for half in range(4096)
+        ]
+        for roundIndex in range(FEISTEL_ROUNDS)
+    ]
 
-    return int.from_bytes(digest[:4], "big") % maxIndex
+
+def permuteColor(value: int, colorTables: list[list[int]]) -> int:
+    """Keyed bijection over all 2^24 colors: a balanced Feistel network on two 12-bit halves."""
+    left, right = value >> 12, value & 0xFFF
+    for table in colorTables:
+        left, right = right, left ^ table[right]
+
+    return (left << 12) | right
+
+
+def unpermuteColor(value: int, colorTables: list[list[int]]) -> int:
+    left, right = value >> 12, value & 0xFFF
+    for table in reversed(colorTables):
+        left, right = right ^ table[left], left
+
+    return (left << 12) | right
 
 
 
@@ -71,58 +94,36 @@ def computeBlockSize(maxIndex: int) -> int:
 
 def encodeWord(
     wordIndex: int,
-    mask: int = 0,
-    shift: tuple[int, int, int] = (0, 0, 0),
     maxIndex: int = 2048,
-    offset: int = -1
+    offset: int = -1,
+    colorTables: list[list[int]] | None = None
 ) -> tuple[int, int, int]:
-    maskedIndex = wordIndex ^ (mask % maxIndex)
-
     blockSize = computeBlockSize(maxIndex)
 
     if offset < 0:
         offset = secrets.randbelow(blockSize)
 
-    base = maskedIndex * blockSize + offset
+    value = wordIndex * blockSize + offset
 
-    r = (base >> 16) & 0xFF
-    g = (base >> 8) & 0xFF
-    b = base & 0xFF
+    if colorTables is not None:
+        value = permuteColor(value, colorTables)
 
-    r = (r + shift[0]) % 256
-    g = (g + shift[1]) % 256
-    b = (b + shift[2]) % 256
+    r = (value >> 16) & 0xFF
+    g = (value >> 8) & 0xFF
+    b = value & 0xFF
 
-    permIndex = (r + g + b) % 6
-    perm = PERMUTATIONS[permIndex]
-
-    rgb = [r, g, b]
-
-    return (rgb[perm[0]], rgb[perm[1]], rgb[perm[2]])
+    return (r, g, b)
 
 
-def decodeColor(rgb: tuple[int, int, int], mask: int = 0, shift: tuple[int, int, int] = (0, 0, 0), maxIndex: int = 2048) -> int:
+def decodeColor(rgb: tuple[int, int, int], maxIndex: int = 2048, colorTables: list[list[int]] | None = None) -> int:
     r, g, b = rgb
 
-    permIndex = (r + g + b) % 6
-    perm = PERMUTATIONS[permIndex]
+    value = (r << 16) | (g << 8) | b
 
-    canonical = [0, 0, 0]
+    if colorTables is not None:
+        value = unpermuteColor(value, colorTables)
 
-    for i, p in enumerate(perm):
-        canonical[p] = rgb[i]
-
-    canR, canG, canB = canonical
-
-    canR = (canR - shift[0]) % 256
-    canG = (canG - shift[1]) % 256
-    canB = (canB - shift[2]) % 256
-
-    key = (canR << 16) | (canG << 8) | canB
-    blockSize = computeBlockSize(maxIndex)
-
-    maskedIndex = key // blockSize
-    wordIndex = maskedIndex ^ (mask % maxIndex)
+    wordIndex = value // computeBlockSize(maxIndex)
 
     if wordIndex >= maxIndex:
         raise ValueError("Decoded color value is out of range for the current seed standard.")

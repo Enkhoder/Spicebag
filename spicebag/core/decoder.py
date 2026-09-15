@@ -3,10 +3,9 @@
 from spicebag.constants.defaults import (
     WORD_COUNT_MAX_INDEX,
     SEED_TYPE_STANDARDS,
-    FORBIDDEN_CHUNKS,
-    RGB_VALUE_SHIFTS
+    FORBIDDEN_CHUNKS
 )
-from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, decodeColor
+from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, decodeColor
 from spicebag.constants.theme import GRID_SIZES
 from PIL import Image
 import random
@@ -169,7 +168,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         validateImage(imagePath)
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     img = Image.open(imagePath)
     pixels = img.load()
@@ -187,13 +186,13 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         masterKey = deriveMasterKey(salt)
 
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
-        maskKey, permKey = deriveSubkeys(masterKey)
+        colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
     else:
-        maskKey = None
+        colorTables = None
         rngSeed = None
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
@@ -205,28 +204,24 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
 
     for i in range(wordCount):
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
         r, c = allCoords[i]
 
         basePx = pixels[c * cellWidth, r * cellHeight]
         baseColor = extractRGB(basePx)
 
-        wordMask = deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0
-        currentShift = RGB_VALUE_SHIFTS[i]
-
         wordIndices.append(
             decodeColor(
                 baseColor,
-                mask=wordMask,
-                shift=currentShift,
-                maxIndex=maxIdx
+                maxIndex=maxIdx,
+                colorTables=colorTables
             )
         )
 
     # A wrong salt yields in-range but incorrect indices, so the phrase fails
     # validation wholesale. The progress bar only advances for words that belong
-    # to a successfully recovered mnemonic — a failed decode therefore stays 0%.
+    # to a successfully recovered mnemonic, so a failed decode stays at 0%.
     result = resolveMnemonic(wordIndices, wordCount)
 
     if result is None:

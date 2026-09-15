@@ -71,7 +71,6 @@ AGENTS.md
 .cursor/
 .cursorrules
 .aider*
-graphify-out/
 
 
 
@@ -80,7 +79,6 @@ graphify-out/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-$RECYCLE.BIN/
 .DS_Store
 .Spotlight-V100
 .Trashes
