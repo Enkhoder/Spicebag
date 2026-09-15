@@ -12,9 +12,9 @@ from spicebag.app.tree import RootNode, TreeNode, renderBlocks
 from textual.scroll_view import ScrollView
 from textual.app import ComposeResult
 from typing import Optional, Sequence
-from rich.console import Console
 from textual.geometry import Size
 from textual.screen import Screen
+from rich.console import Console
 from rich.segment import Segment
 from textual.strip import Strip
 from rich.text import Text
@@ -39,17 +39,31 @@ PROSE = [
 
 HOW_THIS_WORKS_ROWS = [
     [
-        ("Each cell/tile is one word and has 8,192 possible colors", C_DIM),
-        (" (16,777,216 colors / 2,048 words)", C_WHITE),
-        (" for BIP39 and Electrum standards, or 16,384", C_DIM),
-        (" (16,777,216 colors / 1,024 words)", C_WHITE),
+        ("Each cell/tile is one word. The 16,777,216 colors are split in order into one chunk per word: ", C_DIM),
+        ("2,048 chunks of 8,192 colors", C_WHITE),
+        (" for BIP39 and Electrum standards, or ", C_DIM),
+        ("1,024 chunks of 16,384 colors", C_WHITE),
         (" for SLIP39 standard.", C_DIM),
+    ],
+    [
+        ("Without salt, a cell's hex code falls inside its word's chunk: word #1 ", C_DIM),
+        ("abandon", C_WHITE),
+        (" is ", C_DIM),
+        ("#000000-#001FFF", C_WHITE),
+        (", word #2 ", C_DIM),
+        ("ability", C_WHITE),
+        (" is ", C_DIM),
+        ("#002000-#003FFF", C_WHITE),
+        (", and so on. The unsalted image sample on ", C_DIM),
+        ("ENCODE", C_IMG),
+        (" follows this, read left-to-right first, top-to-bottom.", C_DIM),
     ],
     [
         ("Additionally, image salting is possible through thick layers of encryption: ", C_DIM),
         ("Argon2id + HKDF + HMAC", C_WHITE),
-        (". Different salts produce different possible color combinations per word. The number of "
-         "possible colors per cell is called the block size.", C_DIM),
+        (". A salt scatters each word's colors across the whole color space in its own pattern, so a "
+         "salted cell's hex code reveals nothing. The number of possible colors per cell is called the "
+         "block size.", C_DIM),
     ],
     [
         ("As a result, one seed phrase has ", C_DIM),
@@ -168,7 +182,7 @@ def _note(segments: Sequence[tuple[str, str | None]]) -> TreeNode:
 
 
 def _spacer() -> TreeNode:
-    """Blank continuation line — the renderer only auto-spaces root-level
+    """Blank continuation line. The renderer only auto-spaces root-level
     branches, so notes and nested siblings need one of these between them."""
     return TreeNode(kind="note", text=Text(""))
 
@@ -213,7 +227,7 @@ def _encodeBlock(colorSpace: Optional[ColorSpace], masked: bool) -> RootNode:
             sampleClickable=True,
         )
         root.children.append(_branch(
-            [("Try the image sample below. Click on a cell to reroll its color.", C_DIM)],
+            [("Try the unsalted image sample below. Click on a cell to reroll its color within its word's chunk.", C_DIM)],
             [sample],
         ))
 
@@ -317,14 +331,13 @@ def licenseLine(hoverPhase: int) -> Text:
 
 
 def gradientRule(width: int) -> Text:
-    """Full-width divider, re-coloured across the banner gradient on every
+    """Full-width divider, re-colored across the banner gradient on every
     rebuild so a resize re-spreads it over the new width."""
     text = Text(end="")
     for x in range(width):
         text.append("─", style=bannerGradientHex(x / max(1, width - 1)))
 
     return text
-
 
 
 
@@ -362,7 +375,7 @@ class HelpLog(ScrollView):
 
     A RichLog stood here until the document outgrew it. RichLog only appends, so
     every hover meant clearing it and re-writing all ~160 lines, and each write
-    re-measured its line and reassigned virtual_size — 47ms per hover, which is
+    re-measured its line and reassigned virtual_size: 47ms per hover, which is
     what made the cursor stutter. Holding the Strips instead lets the screen swap
     in only the lines that changed."""
 
@@ -646,7 +659,7 @@ class HelpScreen(Screen):
     ######## INTERACTIVE SAMPLE ########
 
     def _handleSampleClick(self, line: int, col: int) -> None:
-        """A click re-rolls only the clicked tile (same next-colour logic as the
+        """A click re-rolls only the clicked tile (same next-color logic as the
         real confirm-step preview) and pauses auto-reshuffle for 3 seconds."""
         cs = self._imgColorSpace
         if cs is None or self._imgMasked or self._sampleStartLine < 0:
@@ -796,7 +809,7 @@ class HelpScreen(Screen):
     def _section(self, name: str, key: tuple, build):
         """Rasterize a section of the document once per distinct key.
 
-        Most of the page — the command list, the path tables, the closing prose —
+        Most of the page (the command list, the path tables, the closing prose)
         depends on nothing but the width, so a hover that only repaints one word
         of the decode grid must not re-wrap and re-rasterize all of it. Sections
         that do change carry their mutable state in the key: the encode sample on

@@ -1,4 +1,4 @@
-The interface is now the only way in. The `encode` and `decode` subcommands are gone, screenshots render against your real terminal colors instead of a fixed palette, and the in-app guide redraws from cached strips rather than rewriting itself.
+Image encoding starts over. An unsalted image now stores every word as a literal chunk of the 24-bit color space, so a seed phrase can be read back from its PNG with a color picker and a wordlist, without Spicebag installed.
 
 ```bash
 pip install --upgrade spicebag
@@ -6,52 +6,37 @@ pip install --upgrade spicebag
 
 ### Breaking changes
 
-- **`spicebag encode` and `spicebag decode` are removed.** Encoding and decoding happen in the TUI and nowhere else. A seed phrase passed as a command-line argument lands in shell history, in the process table, and in any shell integration that records commands. The application can clear none of that afterwards. Scripts that called either subcommand will need rewriting; there is no drop-in replacement, by design.
-- The command line now accepts flags only: `--version` / `-V` and `--help` / `-h`.
-- Everything that shelled out to those subcommands was rewritten to match: CI smoke-tests `spicebag --help`, the release job decodes the example images through `decodeImage` directly, and [`examples/README.md`](examples/README.md) walks through the interface instead.
+> **3.0.0 is a fresh start for images.** Every image encoded or decoded from this version on follows the new color rules, and images made by 1.x or 2.x do not decode here. Those images are not lost: they still decode on 2.x, so keep `pip install "spicebag<3"` in a separate virtual environment for as long as you rely on them.
 
-### Screenshots match your terminal
+- **Unsalted words map onto literal hex chunks.** The 16,777,216 colors are split in order into one chunk per word, and a word's color always falls inside its own chunk. Word 1 of a 2048-word list (abandon) owns `#000000` to `#001FFF`, word 2 owns `#002000` to `#003FFF`, and the last word owns `#FFE000` to `#FFFFFF`. The 1024-word SLIP39 list uses chunks of 16,384. Cells still run left to right, top to bottom.
+- **`RGB_VALUE_SHIFTS` and `PERMUTATIONS` are removed.** The fixed per-position channel shifts and the six channel permutations sat between the word index and the color, hiding the chunk structure. `encodeWord` and `decodeColor` take `colorTables` in place of `shift` and `mask`, and `ColorSpace` carries `colorTables` in place of `shifts` and `masks`.
+- **Salted colors scatter across the whole color space.** With a salt, the 24-bit value passes through a salt-keyed permutation before it becomes the color: a 10-round Feistel network whose round keys come from the Argon2id master key through HKDF. Each word still owns exactly 8,192 colors (16,384 for SLIP39) and no color belongs to two words, but those colors are spread pseudo-randomly over all 16,777,216 instead of sitting in one slice, so rerolling a salted cell can land on any hue. The per-position XOR mask is gone: within one salt a word keeps the same color set in every cell, and the salt-seeded cell shuffle still hides word positions. The number of colors per word is unchanged, so every phrase and salt still has as many distinct images as before.
 
-Exports used to be re-rendered through Rich's `SVG_EXPORT_THEME` and Textual's `MONOKAI`, so every capture came out with a `#292929` frame and a `#0C0C0C` body regardless of how the terminal was configured. Spicebag now queries the terminal for its real background, foreground, and all sixteen ANSI slots (OSC 11, OSC 10, OSC 4) at startup and renders the SVG against those.
+### Manual decoding
 
-Terminals that do not answer fall back to the previous fixed dark theme, so nothing regresses. On Windows, legacy `conhost.exe` answers no queries and is read from its console color table instead.
+The README has a new [Manual Decoding](README.md#manual-decoding) section that walks through reading an unsalted image by hand: find the wordlist from the aspect ratio, read each cell's hex code, and compute the word number from red and green alone (`R × 8 + ⌊G ÷ 32⌋ + 1`, or `R × 4 + ⌊G ÷ 64⌋ + 1` for SLIP39). An unsalted image no longer depends on Spicebag, or on any software at all, still being around to read it.
 
 ### Interface
 
-- Screenshots are bound to <kbd>F12</kbd>. The previous <kbd>Ctrl</kbd>+<kbd>S</kbd> is intercepted as XOFF by legacy console hosts, which made the security warning screen impossible to capture.
-- The window title is set through the Win32 console API on Windows, so legacy hosts no longer print the raw escape sequence as a stray line at startup.
-- `--help` is hand-written rather than generated, and no longer advertises framework defaults.
-- The help screen renders from cached strips instead of rewriting the whole log on every frame. It lists F12 alongside the typed commands, and Ctrl-clicking the author credit in its footer opens the GitHub profile.
+- The help screen explains the color chunks under HOW THIS WORKS, with abandon and ability as worked ranges, and labels the ENCODE image sample as unsalted: rerolling a cell keeps its color inside the same word's chunk. Its salting paragraph explains that a salt scatters each word's colors across the whole color space.
+- An unknown command in the main menu reads `No such command: <input>`.
+
+### Command line
+
+- `spicebag --help` and `spicebag -h` print a compact usage block with no blank lines.
+- Any argument that is not one of the four flags stops the run before the interface starts. It prints `No such option: <input>` for a token starting with `-` and `No such command: <input>` for anything else, followed by `spicebag --help` and `spicebag -h`, and exits with status 2. Whole tokens are checked, so a stray word after `-h` is an error instead of being ignored, and combined short flags such as `-hV` are rejected.
+
+### Examples and tests
+
+- Every decodable image in [`examples/images/`](examples/images) is re-encoded from the same phrases and salts, so `tests/smoke.py` and the release job's decode check both run against the new format.
+- `24-seed-0x59756E-interchanged.png` is rebuilt as a 3.0.0 encode with five cells swapped, so it still fails for the reason its name gives.
 
 ### Platform testing
 
-> **The encoding core is covered on all three platforms. The interface is verified on Windows only.**
-> CI runs the encode and decode round trip on Linux, Windows and macOS for every change, so the cryptography and the PNG path are exercised everywhere. What CI cannot drive is a full-screen interface, and what it never touches is the per-OS probing code. Nothing below is known to be broken; treat it as unverified rather than unsupported.
-
-| OS | Status |
-|---|---|
-| Windows 11 | Fully exercised: interface, screenshots, Windows Terminal and legacy `conhost.exe` |
-| macOS | Core green in CI; interface exercised only in a VMware guest, never on real hardware |
-| Linux | Core green in CI; interface not exercised |
-
-The code that branches on platform, and therefore carries the most risk:
-
-- **`utils/terminalColors.py`**: the POSIX half of the palette probe (`termios`, `tty`, `select`) has never run. The Windows half and the fallback theme are covered.
-- **`app/cli.py`**: `setTerminalTitle` falls back to an OSC 0 escape sequence off Windows.
-- **`utils/networkDetect.py`**: the Linux `/sys/class/net` and `rfkill` reads, and the macOS `networksetup` and `ifconfig` shell-outs plus the Bluetooth plist read, are unverified.
-
-Each of these degrades to a safe default rather than raising, so a failure should cost a single feature rather than the session. Reports from macOS and Linux users are the fastest way to close the gap: [open an issue](https://github.com/Enkhoder/Spicebag/issues).
-
-### Supply chain
-
-Publishing still runs through [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/). No long-lived API token exists on any machine or in any repository secret. [`release.yml`](.github/workflows/release.yml) fires on a `v*` tag, refuses to build unless the tag matches the version in `pyproject.toml`, builds and `twine check`s the wheel and sdist, then holds publishing behind the `pypi` environment for manual approval.
-
-Before that gate it installs the freshly built wheel into a clean virtualenv and decodes two example images. That step used to call the `decode` subcommand this release removes, so it now calls `decodeImage` directly, and still proves a clean install can decode a real PNG.
-
-[`ci.yml`](.github/workflows/ci.yml) runs the encode/decode round trip in `tests/smoke.py` across Linux, Windows and macOS on Python 3.10 through 3.13, and fails the build if the wheel ever contains a file that must not ship.
+CI runs the encode and decode round trip on every change on Linux (Python 3.10 and 3.13), Windows (3.12) and macOS (3.12), so the new color transform is covered on all three platforms. The interface is verified on Windows only. The per-OS code that 2.0.0 disclosed as unverified is unchanged and still has not run on real macOS or Linux hardware: the POSIX half of the palette probe in `utils/terminalColors.py`, the OSC 0 window-title fallback in `app/cli.py`, and the Linux and macOS network detection in `utils/networkDetect.py`. Each degrades to a safe default rather than raising. Reports from macOS and Linux users close that gap fastest: [open an issue](https://github.com/Enkhoder/Spicebag/issues).
 
 ### Documentation
 
-- [`README.md`](README.md): usage, the encoding algorithm, the configuration-space math, and a new terminal-compatibility section covering 24-bit color, mouse reporting, OSC 8 hyperlinks, and palette queries per OS
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): module map and the invariants that aren't visible from any single file
-- [`SECURITY.md`](SECURITY.md): threat model and scope
+- [`README.md`](README.md): the Manual Decoding section, a Security Considerations warning that an unsalted image protects nothing, How It Works and Configuration Space rewritten around the two-step color transform, and the banner mascot's belt split between the brand gradient and its inversion
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the color transform with its salted Feistel permutation, why the unsalted path takes no transform after the block offset, and the command line's input check
+- [`SECURITY.md`](SECURITY.md): reading an unsalted image by hand is listed as out of scope, since it is intentional by design
