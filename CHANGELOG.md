@@ -26,10 +26,17 @@ The README has a new [Manual Decoding](README.md#manual-decoding) section that w
 - `spicebag --help` and `spicebag -h` print a compact usage block with no blank lines.
 - Any argument that is not one of the four flags stops the run before the interface starts. It prints `No such option: <input>` for a token starting with `-` and `No such command: <input>` for anything else, followed by `spicebag --help` and `spicebag -h`, and exits with status 2. Whole tokens are checked, so a stray word after `-h` is an error instead of being ignored, and combined short flags such as `-hV` are rejected.
 
+### Performance and memory
+
+- **Cell integrity is checked cell by cell instead of pixel by pixel.** Decoding asks Pillow for the colors inside a cell and stops the moment a second one appears, rather than walking every pixel in Python. A 2000px-per-cell image is checked in under a second instead of a couple of minutes, and the same files are accepted and rejected as before.
+- **Finished output is frozen.** A command that has finished can no longer change, so the main menu draws it once and keeps the picture, redrawing it only when the window gets narrower. That is why encoding and decoding now run at the same speed in a long session as in a fresh one: with fifty commands of history, a redraw takes 0.44 ms instead of 239 ms.
+- **Masked output is dropped from memory.** Masking used to be a picture drawn over words the program still held. Now, when a command finishes, its decoded words, invalid word notes and image sample colors are released along with the rest of the block, and only the masked picture is kept.
+- The installed version string is read from the package metadata once per session rather than on every mouse move.
+
 ### Examples and tests
 
 - Every decodable image in [`examples/images/`](examples/images) is re-encoded from the same phrases and salts, so `tests/smoke.py` and the release job's decode check both run against the new format.
-- `24-seed-0x59756E-interchanged.png` is rebuilt as a 3.0.0 encode with five cells swapped, so it still fails for the reason its name gives.
+- The images kept as rejection cases are named for what they test: `Corrupted-png-compressed-pixels.png` for cells that are no longer one flat color, `Corrupted-png-invalid-aspect-ratio.png` for a shape that matches no grid, and `Corrupted-png-invalid-color-space.png` for an alpha channel that is not fully opaque.
 
 ### Platform testing
 
