@@ -22,6 +22,7 @@ Encoded PNGs. **The filename carries the salt**: do not rename these files, or t
 | `12-seedless.png`, `20-seedless.png`, `24-seedless.png`, `33-seedless.png` | none |
 | `12-seed-Z3wjBTmDso1eLQ.png` | `Z3wjBTmDso1eLQ` |
 | `20-seed-f607we26jY30a4bPFr.png` | `f607we26jY30a4bPFr` |
+| `24-interchanged-seed-Enkhoder.png` | `Enkhoder` |
 | `24-seed-1r0WG9A94Jhl2Erv.png` | `1r0WG9A94Jhl2Erv` |
 | `24-seed-∣⫃┼►⁉₅䯑⦜➗ⷕ⩼⣢⩹ⴱ⽨ⶃ⪐⏔.png` | the non-ASCII string in the filename |
 | `33-seed-XjpJxIjOiPQ94DR.png` | `XjpJxIjOiPQ94DR` |
@@ -30,8 +31,9 @@ Deliberately invalid images, kept as decoder regression cases:
 
 | File | Why it fails |
 |------|--------------|
-| `Corrupted-png-1.png`, `Corrupted-png-2.png` | fail PNG chunk / cell-integrity validation |
-| `24-seed-0x59756E-interchanged.png` | cells swapped after encoding |
+| `Corrupted-png-compressed-pixels.png` | cells are no longer one flat color after lossy compression |
+| `Corrupted-png-invalid-aspect-ratio.png` | width to height ratio matches no grid |
+| `Corrupted-png-invalid-color-space.png` | five cells carry partial alpha instead of a fully opaque channel |
 | `First-image-generated-using-old-algorithm-undecodable.png` | produced by a superseded encoding algorithm |
 
 ## Usage
