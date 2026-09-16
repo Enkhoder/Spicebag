@@ -101,13 +101,18 @@ def extractRGB(pixel):
 
 
 def validateImage(path) -> bool:
+    """Verify every pixel inside each cell is identical. Each cell is counted as one block through
+    Pillow rather than pixel by pixel in Python: asking for at most one color returns nothing once a
+    second color appears, which keeps a 2000px-per-cell image in seconds rather than minutes."""
     validatePNGStructure(path)
 
     img = Image.open(path)
-    pixels = img.load()
 
-    if pixels is None:
-        raise ValueError("Failed to load image pixel data.")
+    if img.mode not in ("RGB", "RGBA"):
+        raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
+
+    if img.mode == "RGBA" and img.getchannel("A").getextrema() != (255, 255):
+        raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
 
     width, height = img.size
     cols, rows, _, _ = getGridDimensions(width, height)
@@ -122,20 +127,9 @@ def validateImage(path) -> bool:
 
     for r in range(rows):
         for c in range(cols):
-            basePx = pixels[c * cellWidth, r * cellHeight]
-            baseColor = extractRGB(basePx)
-            cellBad = False
+            cell = img.crop((c * cellWidth, r * cellHeight, (c + 1) * cellWidth, (r + 1) * cellHeight))
 
-            for y in range(r * cellHeight, (r + 1) * cellHeight):
-                for x in range(c * cellWidth, (c + 1) * cellWidth):
-                    if extractRGB(pixels[x, y]) != baseColor:
-                        cellBad = True
-                        break
-
-                if cellBad:
-                    break
-
-            if cellBad:
+            if cell.getcolors(maxcolors=1) is None:
                 contaminated += 1
 
     if contaminated:
