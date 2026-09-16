@@ -80,11 +80,3 @@ class SpicebagApp(App):
         handler = getattr(self.screen, "_onAppBlur", None)
         if handler is not None:
             handler()
-
-
-
-######## ENTRY POINT ########
-
-if __name__ == "__main__":
-    app = SpicebagApp()
-    app.run()
