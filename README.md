@@ -308,7 +308,7 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 > Spicebag provides **no protection** against malware, keyloggers, screen capture, coercion, or any form of surveillance. Use it only in a secure, private environment.
 
 - **An unsalted image protects nothing.** Anyone who gets hold of it can read the seed phrase back with a color picker and the public wordlist (see [Manual Decoding](#manual-decoding)). Treat it exactly like the phrase written on paper, and use a salt for any image you cannot keep physically secure.
-- **Salt** is processed with **Argon2id** (`time_cost` = 4, `memory_cost` = 256 MB) making brute-force infeasible.
+- **Salt** is processed with **Argon2id** (`time_cost=4`, `memory_cost=256 MB`) making brute-force infeasible.
 - All randomness for color offsets uses Python's `secrets` module (CSPRNG).
 - The salt is **not stored** anywhere. Losing it means the image cannot be decoded.
 
@@ -325,6 +325,12 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 ## Contributing
 
 [`docs/ARCHITECTURE.md`](https://github.com/Enkhoder/Spicebag/blob/main/docs/ARCHITECTURE.md) maps the codebase layer-by-layer and documents the invariants that are not obvious from reading a single file, such as randomness source, single-sourced tables, and seed phrase handling in logs. Read it before changing anything in `spicebag/core/` or `spicebag/utils/colors.py`.
+
+---
+
+## Trivia
+
+This project was named after the iconic Irish-Chinese [takeaway dish](https://en.wikipedia.org/wiki/Spice_bag). You throw seasoning and *salt* into a paper bag and shake it. That's more or less what the encoder does.
 
 ---
 
