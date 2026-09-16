@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version
+from functools import lru_cache
 from rich.table import Table
 from enum import Enum, auto
 from pathlib import Path
@@ -10,7 +11,10 @@ from pathlib import Path
 
 ######## VERSIONING ########
 
+@lru_cache(maxsize=1)
 def getVersion() -> str:
+    """Cached: the banner asks for the version on every animation frame and every hover, and reading
+    the installed package metadata is a filesystem lookup."""
     try:
         return version("spicebag")
 
