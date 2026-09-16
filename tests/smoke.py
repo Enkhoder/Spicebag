@@ -13,8 +13,8 @@ from spicebag.core.generator import encodeMnemonic, bulkEncodeMnemonic, identify
 from spicebag.core.decoder import decodeImage
 import tempfile
 import hashlib
-import zipfile
 import pathlib
+import zipfile
 import sys
 import io
 
@@ -25,9 +25,9 @@ import io
 EXAMPLES = pathlib.Path(__file__).resolve().parent.parent / "examples" / "images"
 
 EXPECTED_FAILURES = {
-    "Corrupted-png-1",
-    "Corrupted-png-2",
-    "24-seed-0x59756E-interchanged",
+    "Corrupted-png-compressed-pixels",
+    "Corrupted-png-invalid-aspect-ratio",
+    "Corrupted-png-invalid-color-space",
     "First-image-generated-using-old-algorithm-undecodable"
 }
 
