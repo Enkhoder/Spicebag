@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,15 +25,7 @@ classifiers = [
     "Topic :: Security :: Cryptography",
     "Topic :: Utilities"
 ]
-dependencies = [
-    "typer",
-    "rich",
-    "textual",
-    "pillow",
-    "mnemonic",
-    "shamir-mnemonic",
-    "argon2-cffi"
-]
+dynamic = ["dependencies"]
 
 [project.urls]
 Homepage = "https://github.com/Enkhoder/Spicebag"
@@ -42,6 +34,9 @@ Issues = "https://github.com/Enkhoder/Spicebag/issues"
 
 [project.scripts]
 spicebag = "spicebag.app.cli:app"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.packages.find]
 include = ["spicebag*"]
