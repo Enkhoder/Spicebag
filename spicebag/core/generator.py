@@ -112,23 +112,13 @@ def encodeMnemonic(
     imgPath,
     cellPx=100,
     salt="",
-    precomputed=None,
-    precomputedMnemonic=None,
     cancelCheck=None,
     progressCallback=None
 ):
-    if precomputedMnemonic is not None:
-        indices, _, wordCount, maxIdx = precomputedMnemonic
-
-    else:
-        indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
-
+    indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
     cols, rows = GRID_SIZES[wordCount]
 
-    if precomputed is not None:
-        colorTables, rngSeed = precomputed
-
-    elif salt:
+    if salt:
         masterKey = deriveMasterKey(salt)
         colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
@@ -271,17 +261,15 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
 class ColorSpace:
     cols: int
     rows: int
-    wordCount: int
     maxIdx: int
     blockSize: int
     indices: list
     colorTables: list | None
     cellToWord: dict = field(default_factory=dict)
-    offsets: dict = field(default_factory=dict)
     colorRGB: dict = field(default_factory=dict)
 
 
-def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=None):
+def precomputeColorSpace(mnemonicRaw, salt):
     indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
     cols, rows = GRID_SIZES[wordCount]
 
@@ -290,15 +278,9 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
         colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
-        if progressCallback:
-            progressCallback(0.5)
-
     else:
         colorTables = None
         rngSeed = None
-
-    if cancelCheck and cancelCheck():
-        raise InterruptedError("Canceled")
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
 
@@ -307,7 +289,7 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
 
     blockSize = computeBlockSize(maxIdx)
 
-    cs = ColorSpace(cols, rows, wordCount, maxIdx, blockSize, indices, colorTables)
+    cs = ColorSpace(cols, rows, maxIdx, blockSize, indices, colorTables)
 
     rng = secrets.SystemRandom()
 
@@ -329,11 +311,7 @@ def precomputeColorSpace(mnemonicRaw, salt, cancelCheck=None, progressCallback=N
             color = encodeWord(indices[i], maxIndex=maxIdx, offset=offset, colorTables=colorTables)
             tries += 1
 
-        cs.offsets[(r, c)] = offset
         cs.colorRGB[(r, c)] = color
-
-    if progressCallback:
-        progressCallback(1.0)
 
     return cs
 
@@ -356,7 +334,6 @@ def rerollCell(cs, r, c):
         offset = (offset + 1) % cs.blockSize
         color = encodeWord(cs.indices[i], maxIndex=cs.maxIdx, offset=offset, colorTables=cs.colorTables)
 
-    cs.offsets[(r, c)] = offset
     cs.colorRGB[(r, c)] = color
     return True
 

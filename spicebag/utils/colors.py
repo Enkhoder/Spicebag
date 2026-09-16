@@ -3,7 +3,6 @@
 from spicebag.constants.defaults import FEISTEL_ROUNDS
 from argon2.low_level import hash_secret_raw, Type
 import hashlib
-import secrets
 import hmac
 
 
@@ -11,9 +10,6 @@ import hmac
 ######## SEED ENCODER ########
 
 def deriveMasterKey(salt: str) -> bytes:
-    if not salt:
-        return b"\x00" * 32
-
     saltBytes = salt.encode("utf-8")
 
     return hash_secret_raw(
@@ -94,16 +90,11 @@ def computeBlockSize(maxIndex: int) -> int:
 
 def encodeWord(
     wordIndex: int,
+    offset: int,
     maxIndex: int = 2048,
-    offset: int = -1,
     colorTables: list[list[int]] | None = None
 ) -> tuple[int, int, int]:
-    blockSize = computeBlockSize(maxIndex)
-
-    if offset < 0:
-        offset = secrets.randbelow(blockSize)
-
-    value = wordIndex * blockSize + offset
+    value = wordIndex * computeBlockSize(maxIndex) + offset
 
     if colorTables is not None:
         value = permuteColor(value, colorTables)
@@ -123,9 +114,4 @@ def decodeColor(rgb: tuple[int, int, int], maxIndex: int = 2048, colorTables: li
     if colorTables is not None:
         value = unpermuteColor(value, colorTables)
 
-    wordIndex = value // computeBlockSize(maxIndex)
-
-    if wordIndex >= maxIndex:
-        raise ValueError("Decoded color value is out of range for the current seed standard.")
-
-    return wordIndex
+    return value // computeBlockSize(maxIndex)
