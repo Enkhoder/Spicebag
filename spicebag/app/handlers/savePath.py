@@ -75,7 +75,7 @@ def parseSavePath(raw: str, defaultDir: Path) -> tuple[str, str] | str:
 
     A run of two or more consecutive separators (// \\ /\\ \\/) is an
     explicit separator: the part before is the directory, the part after
-    is the stem — no folder-priority check.
+    is the stem, with no folder-priority check.
 
     A single separator does a folder-priority check: if the full path is
     an existing directory the stem defaults (image saved inside).

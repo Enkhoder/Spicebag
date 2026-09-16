@@ -8,14 +8,11 @@ from spicebag.constants.theme import (
     SCREENSHOT_KEY,
 )
 from spicebag.core.generator import ColorSpace, precomputeColorSpace, rerollCell
+from spicebag.app.widgets.stripLog import StripLog, renderStrips
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
-from textual.scroll_view import ScrollView
 from textual.app import ComposeResult
 from typing import Optional, Sequence
-from rich.console import Console
-from textual.geometry import Size
 from textual.screen import Screen
-from rich.segment import Segment
 from textual.strip import Strip
 from rich.text import Text
 from textual import events
@@ -39,17 +36,31 @@ PROSE = [
 
 HOW_THIS_WORKS_ROWS = [
     [
-        ("Each cell/tile is one word and has 8,192 possible colors", C_DIM),
-        (" (16,777,216 colors / 2,048 words)", C_WHITE),
-        (" for BIP39 and Electrum standards, or 16,384", C_DIM),
-        (" (16,777,216 colors / 1,024 words)", C_WHITE),
+        ("Each cell/tile is one word. The 16,777,216 colors are split in order into one chunk per word: ", C_DIM),
+        ("2,048 chunks of 8,192 colors", C_WHITE),
+        (" for BIP39 and Electrum standards, or ", C_DIM),
+        ("1,024 chunks of 16,384 colors", C_WHITE),
         (" for SLIP39 standard.", C_DIM),
+    ],
+    [
+        ("Without salt, a cell's hex code falls inside its word's chunk: word #1 ", C_DIM),
+        ("abandon", C_WHITE),
+        (" is ", C_DIM),
+        ("#000000-#001FFF", C_WHITE),
+        (", word #2 ", C_DIM),
+        ("ability", C_WHITE),
+        (" is ", C_DIM),
+        ("#002000-#003FFF", C_WHITE),
+        (", and so on. The unsalted image sample on ", C_DIM),
+        ("ENCODE", C_IMG),
+        (" follows this, read left-to-right first, top-to-bottom.", C_DIM),
     ],
     [
         ("Additionally, image salting is possible through thick layers of encryption: ", C_DIM),
         ("Argon2id + HKDF + HMAC", C_WHITE),
-        (". Different salts produce different possible color combinations per word. The number of "
-         "possible colors per cell is called the block size.", C_DIM),
+        (". A salt scatters each word's colors across the whole color space in its own pattern, so a "
+         "salted cell's hex code reveals nothing. The number of possible colors per cell is called the "
+         "block size.", C_DIM),
     ],
     [
         ("As a result, one seed phrase has ", C_DIM),
@@ -168,7 +179,7 @@ def _note(segments: Sequence[tuple[str, str | None]]) -> TreeNode:
 
 
 def _spacer() -> TreeNode:
-    """Blank continuation line — the renderer only auto-spaces root-level
+    """Blank continuation line. The renderer only auto-spaces root-level
     branches, so notes and nested siblings need one of these between them."""
     return TreeNode(kind="note", text=Text(""))
 
@@ -213,7 +224,7 @@ def _encodeBlock(colorSpace: Optional[ColorSpace], masked: bool) -> RootNode:
             sampleClickable=True,
         )
         root.children.append(_branch(
-            [("Try the image sample below. Click on a cell to reroll its color.", C_DIM)],
+            [("Try the unsalted image sample below. Click on a cell to reroll its color within its word's chunk.", C_DIM)],
             [sample],
         ))
 
@@ -317,14 +328,13 @@ def licenseLine(hoverPhase: int) -> Text:
 
 
 def gradientRule(width: int) -> Text:
-    """Full-width divider, re-coloured across the banner gradient on every
+    """Full-width divider, re-colored across the banner gradient on every
     rebuild so a resize re-spreads it over the new width."""
     text = Text(end="")
     for x in range(width):
         text.append("─", style=bannerGradientHex(x / max(1, width - 1)))
 
     return text
-
 
 
 
@@ -336,90 +346,9 @@ def gradientRule(width: int) -> Text:
 BLANK_STRIP = Strip.blank(0)
 
 
-def renderStrips(lines: Sequence[Text], console: Console) -> list[Strip]:
-    """Rasterize pre-wrapped lines into Strips, exactly one Strip per input line.
-
-    Every line the tree renderer emits is already wrapped to the target width and
-    carries no_wrap, so rendering each at its own cell length neither truncates
-    nor pads it. The 1:1 mapping is load-bearing: hover and click regions address
-    the document by line index, so a line that rasterized to two Strips (or none)
-    would silently shift every region below it."""
-    options = console.options.update(overflow="ignore", no_wrap=True)
-    out: list[Strip] = []
-
-    for line in lines:
-        segments = console.render(line, options.update_width(max(1, line.cell_len)))
-        strips = Strip.from_lines(list(Segment.split_lines(segments)))
-        out.append(strips[0] if strips else Strip.blank(0))
-
-    return out
-
-
-class HelpLog(ScrollView):
-    """Scrolling view over a pre-rasterized document, which forwards cell clicks
-    and hovers (in virtual content coordinates) to the screen so the encode
-    sample can re-roll a tile and the decode grid can reveal a word.
-
-    A RichLog stood here until the document outgrew it. RichLog only appends, so
-    every hover meant clearing it and re-writing all ~160 lines, and each write
-    re-measured its line and reassigned virtual_size — 47ms per hover, which is
-    what made the cursor stutter. Holding the Strips instead lets the screen swap
-    in only the lines that changed."""
-
-    ALLOW_SELECT = False
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._strips: list[Strip] = []
-        self._lineCache: dict[tuple[int, int, int], Strip] = {}
-
-
-    def setLines(self, strips: list[Strip], widest: int) -> None:
-        """Swap in a new document, dropping only the cropped lines that moved.
-
-        The screen hands back the identical Strip objects for every section it
-        did not rebuild, so identity is enough to tell which lines are stale. A
-        hover changes about ten of them, and the rest stay cropped and ready."""
-        previous = self._strips
-
-        if len(previous) != len(strips):
-            self._lineCache.clear()
-
-        else:
-            stale = {i for i, (old, new) in enumerate(zip(previous, strips)) if old is not new}
-            for key in [key for key in self._lineCache if key[0] in stale]:
-                del self._lineCache[key]
-
-        self._strips = strips
-        self.virtual_size = Size(widest, len(strips))
-        self.refresh()
-
-
-    def notify_style_update(self) -> None:
-        self._lineCache.clear()
-        super().notify_style_update()
-
-
-    def render_line(self, y: int) -> Strip:
-        scrollX, scrollY = self.scroll_offset
-        width = self.scrollable_content_region.width
-        idx = scrollY + y
-
-        key = (idx, scrollX, width)
-        cached = self._lineCache.get(key)
-        if cached is not None:
-            return cached
-
-        richStyle = self.rich_style
-        if 0 <= idx < len(self._strips):
-            strip = self._strips[idx].crop_extend(scrollX, scrollX + width, richStyle).apply_style(richStyle)
-
-        else:
-            strip = Strip.blank(width, richStyle)
-
-        self._lineCache[key] = strip
-        return strip
-
+class HelpLog(StripLog):
+    """Strip log that forwards cell clicks and hovers, in virtual content coordinates, to the screen
+    so the encode sample can re-roll a tile and the decode grid can reveal a word."""
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
@@ -646,7 +575,7 @@ class HelpScreen(Screen):
     ######## INTERACTIVE SAMPLE ########
 
     def _handleSampleClick(self, line: int, col: int) -> None:
-        """A click re-rolls only the clicked tile (same next-colour logic as the
+        """A click re-rolls only the clicked tile (same next-color logic as the
         real confirm-step preview) and pauses auto-reshuffle for 3 seconds."""
         cs = self._imgColorSpace
         if cs is None or self._imgMasked or self._sampleStartLine < 0:
@@ -796,7 +725,7 @@ class HelpScreen(Screen):
     def _section(self, name: str, key: tuple, build):
         """Rasterize a section of the document once per distinct key.
 
-        Most of the page — the command list, the path tables, the closing prose —
+        Most of the page (the command list, the path tables, the closing prose)
         depends on nothing but the width, so a hover that only repaints one word
         of the decode grid must not re-wrap and re-rasterize all of it. Sections
         that do change carry their mutable state in the key: the encode sample on

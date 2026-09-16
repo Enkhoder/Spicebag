@@ -1,7 +1,7 @@
 ######## LIBRARIES ########
 
-from spicebag.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_IMG, AppState
 from spicebag.core.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
+from spicebag.constants.theme import WORD_COUNTS, C_SUCC, C_DIM, C_INP, C_FAIL, C_IMG, AppState
 from spicebag.app.handlers.savePath import parseSavePath
 from rich.style import Style
 from rich.text import Text
@@ -32,8 +32,6 @@ class EncodeHandlerMixin:
         _encodeFileStem: str
         _shownSaltWarning: bool
         _processing: bool
-        _words: list[str]
-        _currentWordIdx: int
         _cancelFlag: bool
         _encodingNode: typing.Any
         _colorSpace: typing.Any
@@ -413,7 +411,7 @@ class EncodeHandlerMixin:
                 if getattr(self, "_cancelFlag", False):
                     raise InterruptedError()
 
-                # Confirmed success — the result connector turns C_SUCC
+                # Confirmed success: the result connector turns C_SUCC
                 fileUri = Path(finalPath).absolute().as_uri()
                 successMsg = Text()
                 successMsg.append("Image saved: ", style=f"bold {C_SUCC}")
@@ -540,9 +538,7 @@ class EncodeHandlerMixin:
 
 
     def _resetEncodeState(self) -> None:
-        self._words = []
         self._wordCount = 0
-        self._currentWordIdx = 0
         self._encodeSalt = ""
         self._encodePhrase = ""
         self._encodeSeedType = ""

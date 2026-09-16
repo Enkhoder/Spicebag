@@ -3,10 +3,9 @@
 from spicebag.constants.defaults import (
     WORD_COUNT_MAX_INDEX,
     SEED_TYPE_STANDARDS,
-    FORBIDDEN_CHUNKS,
-    RGB_VALUE_SHIFTS
+    FORBIDDEN_CHUNKS
 )
-from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, deriveMask, decodeColor
+from spicebag.utils.colors import deriveMasterKey, deriveSubkeys, decodeColor
 from spicebag.constants.theme import GRID_SIZES
 from PIL import Image
 import random
@@ -102,13 +101,18 @@ def extractRGB(pixel):
 
 
 def validateImage(path) -> bool:
+    """Verify every pixel inside each cell is identical. Each cell is counted as one block through
+    Pillow rather than pixel by pixel in Python: asking for at most one color returns nothing once a
+    second color appears, which keeps a 2000px-per-cell image in seconds rather than minutes."""
     validatePNGStructure(path)
 
     img = Image.open(path)
-    pixels = img.load()
 
-    if pixels is None:
-        raise ValueError("Failed to load image pixel data.")
+    if img.mode not in ("RGB", "RGBA"):
+        raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
+
+    if img.mode == "RGBA" and img.getchannel("A").getextrema() != (255, 255):
+        raise ValueError("PNG contains forbidden chunks or unacceptable color space.")
 
     width, height = img.size
     cols, rows, _, _ = getGridDimensions(width, height)
@@ -123,20 +127,9 @@ def validateImage(path) -> bool:
 
     for r in range(rows):
         for c in range(cols):
-            basePx = pixels[c * cellWidth, r * cellHeight]
-            baseColor = extractRGB(basePx)
-            cellBad = False
+            cell = img.crop((c * cellWidth, r * cellHeight, (c + 1) * cellWidth, (r + 1) * cellHeight))
 
-            for y in range(r * cellHeight, (r + 1) * cellHeight):
-                for x in range(c * cellWidth, (c + 1) * cellWidth):
-                    if extractRGB(pixels[x, y]) != baseColor:
-                        cellBad = True
-                        break
-
-                if cellBad:
-                    break
-
-            if cellBad:
+            if cell.getcolors(maxcolors=1) is None:
                 contaminated += 1
 
     if contaminated:
@@ -169,7 +162,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         validateImage(imagePath)
 
     if cancelCheck and cancelCheck():
-        raise InterruptedError("Cancelled")
+        raise InterruptedError("Canceled")
 
     img = Image.open(imagePath)
     pixels = img.load()
@@ -187,13 +180,13 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         masterKey = deriveMasterKey(salt)
 
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
-        maskKey, permKey = deriveSubkeys(masterKey)
+        colorTables, permKey = deriveSubkeys(masterKey)
         rngSeed = int.from_bytes(permKey[:8], "big")
 
     else:
-        maskKey = None
+        colorTables = None
         rngSeed = None
 
     allCoords = [(r, c) for r in range(rows) for c in range(cols)]
@@ -205,28 +198,24 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
 
     for i in range(wordCount):
         if cancelCheck and cancelCheck():
-            raise InterruptedError("Cancelled")
+            raise InterruptedError("Canceled")
 
         r, c = allCoords[i]
 
         basePx = pixels[c * cellWidth, r * cellHeight]
         baseColor = extractRGB(basePx)
 
-        wordMask = deriveMask(maskKey, i, maxIdx) if maskKey is not None else 0
-        currentShift = RGB_VALUE_SHIFTS[i]
-
         wordIndices.append(
             decodeColor(
                 baseColor,
-                mask=wordMask,
-                shift=currentShift,
-                maxIndex=maxIdx
+                maxIndex=maxIdx,
+                colorTables=colorTables
             )
         )
 
     # A wrong salt yields in-range but incorrect indices, so the phrase fails
     # validation wholesale. The progress bar only advances for words that belong
-    # to a successfully recovered mnemonic — a failed decode therefore stays 0%.
+    # to a successfully recovered mnemonic, so a failed decode stays at 0%.
     result = resolveMnemonic(wordIndices, wordCount)
 
     if result is None:

@@ -168,7 +168,6 @@ class SecureInput(Input):
             event.prevent_default()
             return
 
-
         state = getattr(self.screen, "_state", None) if hasattr(self.screen, "_state") else None
 
         if state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM, AppState.BANNER_CONFIRM):
@@ -197,8 +196,6 @@ class SecureInput(Input):
                     event.stop()
                     event.prevent_default()
                     return
-
-
 
         if state == AppState.ENCODE_PHRASE:
             if event.is_printable and event.character:

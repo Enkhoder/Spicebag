@@ -1,7 +1,7 @@
 # Every change needs the owner's review by default.
 *                       @Enkhoder
 
-# The release workflow is the trust anchor for PyPI Trusted Publishing — anyone
+# The release workflow is the trust anchor for PyPI Trusted Publishing: anyone
 # who can merge a change here can publish under this account.
 /.github/               @Enkhoder
 

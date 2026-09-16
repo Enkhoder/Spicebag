@@ -23,7 +23,8 @@ jobs:
       - name: Verify the tag matches the project version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          VERSION=$(python -c "import tomllib, pathlib; \
+              print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           if [ "$TAG" != "$VERSION" ]; then
             echo "Tag v$TAG does not match pyproject.toml version $VERSION"
             exit 1

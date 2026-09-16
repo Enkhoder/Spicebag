@@ -40,8 +40,13 @@ class RootNode:
     label: Text = field(default_factory=Text)
     bullet: str = C_WHITE
     children: list[TreeNode] = field(default_factory=list)
-    rawLines: list[Text] | None = None
     kind: str = "command"
+
+    # A finished block is frozen: rendered once, then kept only as lines and the Strips they
+    # rasterized to. Its node tree is dropped, so masked words and sample colors stop being held.
+    frozenLines: list[Text] | None = None
+    frozenStrips: list | None = None
+    frozenWidth: int = -1
 
 
 
@@ -322,13 +327,6 @@ def renderBlocks(blocks: list[RootNode], width: int, console: Console) -> tuple[
             labelCont = [("  ", None)]
 
         _emitWrapped(out, bulletPrefix, labelCont, root.label, width, console)
-
-        if root.rawLines is not None:
-            out.append(Text(""))
-            for raw in root.rawLines:
-                _emitWrapped(out, [("  ", None)], [("  ", None)], raw, width, console)
-
-            continue
 
         _renderChildren(
             root.children, [], width, console, out,
