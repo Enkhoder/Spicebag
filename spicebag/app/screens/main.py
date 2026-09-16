@@ -1,19 +1,20 @@
 ######## LIBRARIES ########
 
 from spicebag.constants.theme import (
-    COMMANDS, WORD_COUNTS, GRID_SIZES, BANNER_META, AppState, G_START, G_END,
+    COMMANDS, WORD_COUNTS, GRID_SIZES, BANNER_META, AppState,
     C_BG, C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
-    blendHexColors, getMascotBanner, gradientColor, ASCII_ART_BANNER, bannerHoverFrameCount,
-    SCREENSHOT_KEY
+    blendHexColors, getMascotBanner, gradientColor, bannerGradientHex, ASCII_ART_BANNER,
+    bannerHoverFrameCount, SCREENSHOT_KEY
 )
+from spicebag.app.widgets.stripLog import StripLog, renderStrips, renderRenderable
 from spicebag.app.handlers.screenshot import generateScreenshotPath, executePrint
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
 from spicebag.app.handlers.decode import DecodeHandlerMixin
 from spicebag.app.handlers.encode import EncodeHandlerMixin
 from spicebag.app.widgets.secureInput import SecureInput
-from textual.widgets import Static, Input, RichLog, Rule
 from spicebag.app.widgets.optionsBar import OptionsBar
 from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, Input, Rule
 from textual.app import ComposeResult
 from textual.reactive import reactive
 from textual.screen import Screen
@@ -21,7 +22,6 @@ from textual import events, work
 from rich.cells import cell_len
 from rich.style import Style
 from rich.text import Text
-import colorsys
 import asyncio
 import json
 import time
@@ -30,11 +30,9 @@ import time
 
 ######## CLICKABLE LOG ########
 
-class ClickableLog(RichLog):
-    """RichLog that forwards cell clicks (in virtual content coordinates) to the
+class ClickableLog(StripLog):
+    """Strip log that forwards cell clicks (in virtual content coordinates) to the
     screen so the interactive image sample can re-roll the clicked cell."""
-
-    ALLOW_SELECT = False
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
@@ -158,12 +156,16 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._sampleCols = 0
         self._sampleRows = 0
 
+        # Rasterized banner, keyed by the frame it was drawn for
+        self._welcomeKey: tuple | None = None
+        self._welcomeCache: list = []
+
         super().__init__()
 
 
     def compose(self) -> ComposeResult:
         with Vertical(id="app-container"):
-            log = ClickableLog(id="terminal-log", wrap=False, highlight=False, markup=True)
+            log = ClickableLog(id="terminal-log")
             log.can_focus = False
             yield log
             yield Rule(id="sep-bot")
@@ -485,7 +487,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     def _logWidth(self) -> int:
         try:
-            w = self.query_one("#terminal-log", RichLog).size.width
+            w = self.query_one("#terminal-log", ClickableLog).size.width
 
         except Exception:
             w = 0
@@ -496,41 +498,96 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         return w
 
 
+    def _welcomeStrips(self, width: int) -> list:
+        """Rasterize the banner once per distinct frame. The mascot sweep and the hover highlight
+        change it ten times a second, and nothing else in the document moves with it."""
+        key = (
+            width,
+            self._useMascotBanner,
+            tuple(self._mascotColPhases),
+            self._bannerHoverPhase,
+            getattr(self, "_airplaneMode", None)
+        )
+
+        if self._welcomeKey != key:
+            strips: list = []
+            for item in self._welcome:
+                renderable = Text.from_markup(item) if isinstance(item, str) else item
+                strips.extend(renderRenderable(renderable, width, self.app.console))
+
+            self._welcomeKey = key
+            self._welcomeCache = strips
+
+        return self._welcomeCache
+
+
+    def _freezeHistory(self) -> None:
+        """Turn every block already on screen into a fixed picture.
+
+        A finished block never changes again: its decoded words, invalid-word notes and image sample
+        are masked for good by the time it gets here. Rendering it once and keeping the Strips means
+        the history is never re-rendered on a later frame, and dropping the node tree means the
+        masked content is no longer held in memory where a later read could recover it."""
+        width = self._logWidth()
+        console = self.app.console
+
+        for block in self._blocks:
+            if block.frozenLines is not None:
+                continue
+
+            lines, _, _ = renderBlocks([block], width, console)
+            block.frozenLines = lines
+            block.frozenStrips = renderStrips(lines, console)
+            block.frozenWidth = width
+            block.label = Text()
+            block.children = []
+
+
+    def _blockStrips(self, block: RootNode, width: int) -> list:
+        """Strips for a frozen block, re-wrapped only when the terminal grew narrower than the width
+        the block was captured at."""
+        if block.frozenStrips is not None and block.frozenWidth == width:
+            return block.frozenStrips
+
+        lines: list[Text] = []
+        for line in block.frozenLines or []:
+            lines.extend(line.wrap(self.app.console, width) if line.cell_len > width else [line])
+
+        block.frozenStrips = renderStrips(lines, self.app.console)
+        block.frozenWidth = width
+        return block.frozenStrips
+
+
     def _rebuild(self, scrollToEnd: bool = True) -> None:
         try:
-            log = self.query_one("#terminal-log", RichLog)
+            log = self.query_one("#terminal-log", ClickableLog)
 
         except Exception:
             return
 
-        sampleHit = None
-        lines: list = []
+        width = self._logWidth()
+        strips = list(self._welcomeStrips(width))
+        live = []
 
-        with self.app.batch_update():
-            log.auto_scroll = False
-            log.clear()
+        for block in self._blocks:
+            if block.frozenLines is None:
+                live.append(block)
 
-            for item in self._welcome:
-                if isinstance(item, str):
-                    log.write(Text.from_markup(item))
+            else:
+                strips.extend(self._blockStrips(block, width))
 
-                else:
-                    log.write(item)
-
-            lines, sampleHit, hoverRegions = renderBlocks(self._blocks, self._logWidth(), self.app.console)
-            for line in lines:
-                log.write(line)
-
-        welcomeOffset = len(log.lines) - len(lines)
+        offset = len(strips)
+        lines, sampleHit, hoverRegions = renderBlocks(live, width, self.app.console)
+        strips.extend(renderStrips(lines, self.app.console))
 
         self._hoverRegions = [
-            (lineIdx + welcomeOffset, colStart, colEnd, node, wordIdx)
+            (lineIdx + offset, colStart, colEnd, node, wordIdx)
             for (lineIdx, colStart, colEnd, node, wordIdx) in hoverRegions
         ]
 
         if sampleHit is not None:
             firstBlockLine, blockCol, cols, rows = sampleHit
-            self._sampleStartLine = welcomeOffset + firstBlockLine
+            self._sampleStartLine = offset + firstBlockLine
             self._sampleBlockCol = blockCol
             self._sampleCols = cols
             self._sampleRows = rows
@@ -538,9 +595,10 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         else:
             self._sampleStartLine = -1
 
+        log.setLines(strips, max((strip.cell_length for strip in strips), default=0))
+
         if scrollToEnd:
-            log.auto_scroll = True
-            log.scroll_end(animate=False)
+            log.scrollToEnd()
 
 
 
@@ -857,14 +915,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                     styledLine += char
                     continue
 
-                t = x / max(1, maxW - 1)
-                h = (G_START[0] + (G_END[0] - G_START[0]) * t) % 1.0
-                light = G_START[1] + (G_END[1] - G_START[1]) * t
-                s = G_START[2] + (G_END[2] - G_START[2]) * t
-
-                r, g, b = colorsys.hls_to_rgb(h, light, s)
-                hexColor = f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
-                styledLine += f"[{hexColor}]{char}[/]"
+                styledLine += f"[{bannerGradientHex(x / max(1, maxW - 1))}]{char}[/]"
 
             result.append(styledLine)
 
@@ -1143,7 +1194,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             return node
 
         last = self._blocks[-1] if self._blocks else None
-        if last is not None and last.kind == "shortcut":
+        if last is not None and last.kind == "shortcut" and last.frozenLines is None:
             last.children.append(_objFileNode(filename))
             last.label = Text.from_markup(f"[{C_WHITE}]Screenshots taken and saved:[/]")
 
@@ -1723,6 +1774,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self.app.exit()
             return
 
+        self._freezeHistory()
         self._newRoot(Text(display, style=f"bold {C_INP}"))
         self._rebuild()
 

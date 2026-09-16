@@ -8,14 +8,11 @@ from spicebag.constants.theme import (
     SCREENSHOT_KEY,
 )
 from spicebag.core.generator import ColorSpace, precomputeColorSpace, rerollCell
+from spicebag.app.widgets.stripLog import StripLog, renderStrips
 from spicebag.app.tree import RootNode, TreeNode, renderBlocks
-from textual.scroll_view import ScrollView
 from textual.app import ComposeResult
 from typing import Optional, Sequence
-from textual.geometry import Size
 from textual.screen import Screen
-from rich.console import Console
-from rich.segment import Segment
 from textual.strip import Strip
 from rich.text import Text
 from textual import events
@@ -349,90 +346,9 @@ def gradientRule(width: int) -> Text:
 BLANK_STRIP = Strip.blank(0)
 
 
-def renderStrips(lines: Sequence[Text], console: Console) -> list[Strip]:
-    """Rasterize pre-wrapped lines into Strips, exactly one Strip per input line.
-
-    Every line the tree renderer emits is already wrapped to the target width and
-    carries no_wrap, so rendering each at its own cell length neither truncates
-    nor pads it. The 1:1 mapping is load-bearing: hover and click regions address
-    the document by line index, so a line that rasterized to two Strips (or none)
-    would silently shift every region below it."""
-    options = console.options.update(overflow="ignore", no_wrap=True)
-    out: list[Strip] = []
-
-    for line in lines:
-        segments = console.render(line, options.update_width(max(1, line.cell_len)))
-        strips = Strip.from_lines(list(Segment.split_lines(segments)))
-        out.append(strips[0] if strips else Strip.blank(0))
-
-    return out
-
-
-class HelpLog(ScrollView):
-    """Scrolling view over a pre-rasterized document, which forwards cell clicks
-    and hovers (in virtual content coordinates) to the screen so the encode
-    sample can re-roll a tile and the decode grid can reveal a word.
-
-    A RichLog stood here until the document outgrew it. RichLog only appends, so
-    every hover meant clearing it and re-writing all ~160 lines, and each write
-    re-measured its line and reassigned virtual_size: 47ms per hover, which is
-    what made the cursor stutter. Holding the Strips instead lets the screen swap
-    in only the lines that changed."""
-
-    ALLOW_SELECT = False
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._strips: list[Strip] = []
-        self._lineCache: dict[tuple[int, int, int], Strip] = {}
-
-
-    def setLines(self, strips: list[Strip], widest: int) -> None:
-        """Swap in a new document, dropping only the cropped lines that moved.
-
-        The screen hands back the identical Strip objects for every section it
-        did not rebuild, so identity is enough to tell which lines are stale. A
-        hover changes about ten of them, and the rest stay cropped and ready."""
-        previous = self._strips
-
-        if len(previous) != len(strips):
-            self._lineCache.clear()
-
-        else:
-            stale = {i for i, (old, new) in enumerate(zip(previous, strips)) if old is not new}
-            for key in [key for key in self._lineCache if key[0] in stale]:
-                del self._lineCache[key]
-
-        self._strips = strips
-        self.virtual_size = Size(widest, len(strips))
-        self.refresh()
-
-
-    def notify_style_update(self) -> None:
-        self._lineCache.clear()
-        super().notify_style_update()
-
-
-    def render_line(self, y: int) -> Strip:
-        scrollX, scrollY = self.scroll_offset
-        width = self.scrollable_content_region.width
-        idx = scrollY + y
-
-        key = (idx, scrollX, width)
-        cached = self._lineCache.get(key)
-        if cached is not None:
-            return cached
-
-        richStyle = self.rich_style
-        if 0 <= idx < len(self._strips):
-            strip = self._strips[idx].crop_extend(scrollX, scrollX + width, richStyle).apply_style(richStyle)
-
-        else:
-            strip = Strip.blank(width, richStyle)
-
-        self._lineCache[key] = strip
-        return strip
-
+class HelpLog(StripLog):
+    """Strip log that forwards cell clicks and hovers, in virtual content coordinates, to the screen
+    so the encode sample can re-roll a tile and the decode grid can reveal a word."""
 
     def on_click(self, event: events.Click) -> None:
         event.stop()
