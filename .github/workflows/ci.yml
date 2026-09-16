@@ -23,6 +23,8 @@ jobs:
           - os: ubuntu-latest
             python: "3.10"
           - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
             python: "3.13"
           - os: windows-latest
             python: "3.12"
