@@ -45,5 +45,5 @@ CI runs the encode and decode round trip on every change on Linux (Python 3.10 a
 ### Documentation
 
 - [`README.md`](README.md): the Manual Decoding section, a Security Considerations warning that an unsalted image protects nothing, How It Works and Configuration Space rewritten around the two-step color transform, and the banner mascot's belt split between the brand gradient and its inversion
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the color transform with its salted Feistel permutation, why the unsalted path takes no transform after the block offset, and the command line's input check
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the color transform with its salted Feistel permutation, why the unsalted path takes no transform after the block offset, the command line's input check, how both screens draw through the Strip based log, and the invariant that a finished block is frozen and its nodes released
 - [`SECURITY.md`](SECURITY.md): reading an unsalted image by hand is listed as out of scope, since it is intentional by design

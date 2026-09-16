@@ -30,6 +30,7 @@ spicebag/
 │   │   └── screenshot.py   SVG export with secret masking
 │   └── widgets/
 │       ├── secureInput.py  Input with clipboard and key-repeat disabled
+│       ├── stripLog.py     scrolling view over pre-rasterized Strips
 │       └── optionsBar.py   status bar
 ├── core/
 │   ├── generator.py        encode, bulk encode, interactive ColorSpace
@@ -69,7 +70,9 @@ IDLE → ENCODE_COUNT → ENCODE_WORD_COUNT → ENCODE_PHRASE → ENCODE_SALT
 
 Encode and decode behavior is injected as mixins (`EncodeHandlerMixin` and `DecodeHandlerMixin`), so `MainScreen` holds the state and the handlers hold the flows. Each handler is a `_handleX(self, value: str)` method dispatched from `on_input_submitted`. Two of them ignore `value` (`_handleEncodeConfirm`, `_handleDecodeConfirm`); the parameter stays for a uniform dispatch signature.
 
-The screen rebuilds its entire `RichLog` history on every terminal resize.
+`MainScreen` and `HelpScreen` both draw into a `StripLog` (`app/widgets/stripLog.py`), a `ScrollView` over a list of pre-rasterized `Strip` objects. The screen hands back the identical `Strip` objects for every section it did not rebuild, so only the lines that actually moved are cropped again. One input line rasterizes to exactly one `Strip`: hover and click regions address the document by line index, so a line that produced two Strips would shift every line below it.
+
+A terminal resize rebuilds the live block and re-wraps frozen blocks only when the new width is narrower than the width they were captured at.
 
 ### Core (`core/`)
 
@@ -159,7 +162,7 @@ If Electrum ever forks its English list, give `ELECTRUM_LIST` its own sorted 204
 
 ### Secrets never reach the log
 
-The seed phrase and the salt are never echoed into the `RichLog` history. Both confirm their entry with `_addDashbar(C_INP)` instead of `_addAnswer(value)`, which is reserved for the word count, cell size and fixed strings. The status bar only reports whether a salt is present, never its value.
+The seed phrase and the salt are never echoed into the on-screen history. Both confirm their entry with `_addDashbar(C_INP)` instead of `_addAnswer(value)`, which is reserved for the word count, cell size and fixed strings. The status bar only reports whether a salt is present, never its value.
 
 Screenshot export (`handlers/screenshot.py`) blanks the input, masks the sample grid and any decoded words, takes the capture, and restores everything in a `finally`. `cleanSvg()` then strips `<title>`, `<desc>`, `<metadata>` and comments from the SVG.
 
@@ -168,6 +171,14 @@ The capture goes through the local `exportScreenshot()` rather than Textual's `A
 `InvalidSeedWordsError` masks offending words as `·` characters, so word *lengths* leak but the words do not. This only applies to words absent from every wordlist: typos, not seed words.
 
 The same rule covers the process boundary: no secret may arrive as a command-line argument. See [CLI](#cli-appclipy): the shell history file and the process list are outside the tool's control, which is why no subcommand accepts a phrase or a salt.
+
+### Finished output is frozen and its nodes released
+
+When a command starts, every block already on screen is rendered once, kept as its lines and their Strips, and stripped of its node tree (`RootNode.frozenLines`, `frozenStrips` and `frozenWidth`, written by `MainScreen._freezeHistory()`). A finished block can no longer change: its decoded words, invalid-word notes and image sample are masked by the time it is frozen.
+
+Both halves of that matter. Releasing the nodes is what makes masking more than cosmetic, since the words behind the mask are no longer held anywhere to be read back. Keeping the picture is what makes a redraw cost the same in a long session as in a fresh one, so the banner animation does not slow encoding down as history grows.
+
+Anything that must outlive a command has to be read out of the node tree before `_freezeHistory()` runs, and any new node kind that can still change after its command ends does not belong in a block that gets frozen.
 
 ### `ASCII_ART_BANNER` has load-bearing trailing spaces
 
