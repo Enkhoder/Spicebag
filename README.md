@@ -118,7 +118,7 @@ blockSize = 1 << (24 - (maxIdx.bit_length() - 1))
 | BIP39, Electrum | 2048 | 2¹³ | 8,192 |
 | SLIP39 | 1024 | 2¹⁴ | 16,384 |
 
-Every offset produces a distinct color: the offset is written straight into the low bits of the 24-bit value, so no two offsets collide.
+Every offset produces a distinct color: the offset fills the low bits of the 24-bit value, and the salted color permutation is a bijection, so no two offsets collide.
 
 Since each grid holds exactly one cell per word, the total is `blockSize ^ wordCount`:
 
