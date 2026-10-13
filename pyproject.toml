@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spicebag"
-version = "3.0.0"
+version = "4.0.0"
 description = "Visual Mnemonic Encoder / Decoder"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security :: Cryptography",
     "Topic :: Utilities"
 ]
@@ -33,7 +34,7 @@ Repository = "https://github.com/Enkhoder/Spicebag"
 Issues = "https://github.com/Enkhoder/Spicebag/issues"
 
 [project.scripts]
-spicebag = "spicebag.app.cli:app"
+spicebag = "spicebag.frontend.entry:app"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
@@ -42,4 +43,4 @@ dependencies = { file = ["requirements.txt"] }
 include = ["spicebag*"]
 
 [tool.setuptools.package-data]
-"spicebag.app" = ["*.tcss"]
+"spicebag.frontend" = ["*.tcss"]

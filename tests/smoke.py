@@ -1,16 +1,16 @@
 """End-to-end smoke checks. Run with `python tests/smoke.py` from the repository root.
 
-Exercises the encode/decode round trip across every supported standard and word count,
-asserts that salted encodes stay non-deterministic, and confirms the deliberately invalid
-fixtures still fail. Exits non-zero on the first failure.
+Exercises the encode/decode round trip for every standard and word count, asserts that
+salted encodes stay non-deterministic, confirms the deliberately invalid fixtures still
+fail, and checks that a wrong salt is rejected rather than decoded. Exits non-zero on any failure.
 """
 
 
 
 ######## LIBRARIES ########
 
-from spicebag.core.generator import encodeMnemonic, bulkEncodeMnemonic, identifySeedType
-from spicebag.core.decoder import decodeImage
+from spicebag.backend.generator import encodeMnemonic, bulkEncodeMnemonic, identifySeedType
+from spicebag.backend.decoder import decodeImage, WrongSaltError
 import tempfile
 import hashlib
 import pathlib
@@ -28,7 +28,8 @@ EXPECTED_FAILURES = {
     "Corrupted-png-compressed-pixels",
     "Corrupted-png-invalid-aspect-ratio",
     "Corrupted-png-invalid-color-space",
-    "First-image-generated-using-old-algorithm-undecodable"
+    "First-image-generated-using-old-algorithm-undecodable",
+    "Previous-format-3.0-undecodable"
 }
 
 failures = []
@@ -71,6 +72,14 @@ def decodeFixtures():
     return phrases
 
 
+def generatedPhrases():
+    """BIP39 phrases for the word counts no fixture covers, from fixed entropy so every run checks the same ones."""
+    from mnemonic import Mnemonic
+
+    bip39 = Mnemonic("english")
+    return {bip39.to_mnemonic(bytes(range(size))): "BIP39" for size in (20, 24, 28)}
+
+
 def roundTrip(phrase, seedType, workDir):
     """Three encodes of the same phrase and salt must differ, and all must decode back."""
     wordCount = len(phrase.split())
@@ -109,6 +118,28 @@ def roundTrip(phrase, seedType, workDir):
         check(f"{wordCount}w salt={salt!r} bulk images are unique", len(set(bulkDigests)) == 3)
 
 
+def outcome(image, salt):
+    try:
+        return decodeImage(str(image), salt=salt)[0]
+
+    except WrongSaltError:
+        return "rejected"
+
+
+def proofOfPhrase(phrase, workDir):
+    """A wrong, missing or superfluous salt is rejected instead of yielding another valid phrase."""
+    wordCount = len(phrase.split())
+    salted = workDir / "proof-salted.png"
+    plain = workDir / "proof-plain.png"
+    encodeMnemonic(phrase, str(salted), cellPx=3, salt="smokeSalt")
+    encodeMnemonic(phrase, str(plain), cellPx=3)
+
+    accepted = [salt for salt in ("smokesalt", "smokeSalt ", "k", "m", "x") if outcome(salted, salt) != "rejected"]
+    check(f"{wordCount}w wrong salts are rejected", not accepted, accepted)
+    check(f"{wordCount}w salted image without its salt is rejected", outcome(salted, "") == "rejected")
+    check(f"{wordCount}w unsalted image given a salt is rejected", outcome(plain, "k") == "rejected")
+
+
 def identityAgreement(phrase, seedType):
     """The encoder and the decoder must name the same standard."""
     _, name, _, _ = identifySeedType(phrase)
@@ -124,6 +155,7 @@ def main():
     print("======== FIXTURES ========")
     phrases = decodeFixtures()
     check("at least four distinct phrases recovered", len(phrases) >= 4, len(phrases))
+    phrases.update(generatedPhrases())
 
     print()
     print("======== ROUND TRIP ========")
@@ -134,6 +166,10 @@ def main():
         for phrase, seedType in phrases.items():
             identityAgreement(phrase, seedType)
             roundTrip(phrase, seedType, workDir)
+
+        print()
+        print("======== PROOF OF PHRASE ========")
+        proofOfPhrase(min(phrases, key=lambda phrase: len(phrase.split())), workDir)
 
     print()
 

@@ -1,7 +1,6 @@
 @echo off
 setlocal
 cd /d %~dp0
-set PYTHONPATH=.
 
 if not exist .venv (
     python -m venv .venv
@@ -11,9 +10,9 @@ if not exist .venv (
     call .venv\Scripts\activate
 )
 
-python spicebag/utils/dependencyCheck.py
+python scripts/dependencyCheck.py
 
-python spicebag/app/cli.py %*
+python -m spicebag %*
 
 if %ERRORLEVEL% neq 0 pause
 endlocal

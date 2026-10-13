@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/Enkhoder/Spicebag/stargazers"><img src="https://img.shields.io/github/stars/Enkhoder/Spicebag?style=for-the-badge&logo=github&logoColor=white&label=Stars&color=ECD251" alt="Stars"></a>
   <a href="https://github.com/Enkhoder/Spicebag/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Enkhoder/Spicebag/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
-  <a href="https://github.com/Enkhoder/Spicebag/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-88A4E9?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://github.com/Enkhoder/Spicebag/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-88A4E9?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
   <a href="https://github.com/Enkhoder/Spicebag/blob/main/.github/workflows/ci.yml"><img src="https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-D787EF?style=for-the-badge" alt="OS"></a>
   <a href="https://github.com/Enkhoder/Spicebag/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Enkhoder/Spicebag?style=for-the-badge&color=909090" alt="License"></a>
 </p>
@@ -25,6 +25,8 @@
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
 - **Decode** a color-coded PNG back into the original seed phrase.
 - **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation scatters each word's colors across the whole color space and shuffles the grid, making the image unreadable without the salt.
+- **Proof of phrase**: every image carries an HMAC of its own phrase, so a wrong salt or an altered image is rejected instead of decoding to a different valid phrase.
+- **CLI mode**: `spicebag --encode`, `--decode` and `--palette` run as plain prompts, without the full-screen TUI app.
 - **Multi-standard support**:
 
   | Standard | Word Counts | Wordlist Size |
@@ -34,17 +36,16 @@
   | SLIP39  | 20, 33 | 1024 |
 
 - **PNG integrity checks**: rejects images with forbidden chunks (e.g. `PLTE`, `tRNS`, `iCCP`) and verifies cell-level monochromatic consistency to detect lossy compression.
-- **Checksum validation** on decode ensures the recovered mnemonic is valid before output.
 
 ---
 
 ## How It Works
 
 1. **Word → Index**: Each seed word is looked up in its standard's wordlist.
-2. **Salt Keys**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into a color key and a grid-shuffle key.
-3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a random block offset fills the low bits. Without a salt, that value, split into R/G/B channels, is the cell's color. With a salt, a salt-keyed permutation first scatters it across the whole color space.
+2. **Salt Keys**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into a color key, a grid-shuffle key and a proof key.
+3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a block offset fills the low bits. The offset's top 3 bits carry a slice of the proof of phrase, an HMAC of the whole phrase under the proof key, and the rest is random. Without a salt, that value, split into R/G/B channels, is the cell's color. With a salt, a salt-keyed permutation first scatters it across the whole color space.
 4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
-5. **Decoding**: reverses all steps: undo the permutation, drop the offset, and look up the word by index.
+5. **Decoding**: reverses all steps: undo the permutation, look up each word by index, and check the proof slices against the rebuilt phrase. A wrong salt fails the proof instead of decoding to a different valid phrase.
 
 ---
 
@@ -105,37 +106,38 @@ Once the salt is fixed, almost everything is deterministic:
 |-----------|--------|-------|
 | Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed, one layout per salt |
 | Color permutation | 10-round Feistel network keyed by the salt | ❌ Fixed |
-| **Block offset** | `secrets.SystemRandom().randrange(blockSize)` | ✅ **Free** |
+| Proof of phrase | Top 3 bits of each block offset, from an HMAC of the phrase | ❌ Fixed |
+| **Rest of the block offset** | `secrets.SystemRandom().randrange(blockSize >> 3)` | ✅ **Free** |
 
-The block offset is the only free variable. It occupies the low bits of the 24-bit value left over after the word index is packed into the high bits:
+The block offset occupies the low bits of the 24-bit value left over after the word index is packed into the high bits. Its top 3 bits carry the proof of phrase, so the rest of it is the only free variable:
 
 ```
 blockSize = 1 << (24 - (maxIdx.bit_length() - 1))
 ```
 
-| Standard | Wordlist Size | Block Size | Colors per Word |
-|----------|---------------|------------|-----------------|
-| BIP39, Electrum | 2048 | 2¹³ | 8,192 |
-| SLIP39 | 1024 | 2¹⁴ | 16,384 |
+| Standard | Wordlist Size | Block Size | Colors per Word | Free Colors per Cell |
+|----------|---------------|------------|-----------------|----------------------|
+| BIP39, Electrum | 2048 | 2¹³ | 8,192 | 1,024 |
+| SLIP39 | 1024 | 2¹⁴ | 16,384 | 2,048 |
 
 Every offset produces a distinct color: the offset fills the low bits of the 24-bit value, and the salted color permutation is a bijection, so no two offsets collide.
 
-Since each grid holds exactly one cell per word, the total is `blockSize ^ wordCount`:
+Since each grid holds exactly one cell per word, the total is `(blockSize / 8) ^ wordCount`:
 
 | Phrase | Entropy | Distinct Images per Salt |
 |--------|---------|--------------------------|
-| 12-word BIP39 / Electrum | 156 bits | 9.13 × 10⁴⁶ |
-| 15-word BIP39 | 195 bits | 5.02 × 10⁵⁸ |
-| 18-word BIP39 | 234 bits | 2.76 × 10⁷⁰ |
-| 20-word SLIP39 | 280 bits | 1.94 × 10⁸⁴ |
-| 21-word BIP39 | 273 bits | 1.52 × 10⁸² |
-| 24-word BIP39 / Electrum | 312 bits | 8.34 × 10⁹³ |
-| 33-word SLIP39 | 462 bits | 1.19 × 10¹³⁹ |
+| 12-word BIP39 / Electrum | 120 bits | 1.33 × 10³⁶ |
+| 15-word BIP39 | 150 bits | 1.43 × 10⁴⁵ |
+| 18-word BIP39 | 180 bits | 1.53 × 10⁵⁴ |
+| 20-word SLIP39 | 220 bits | 1.68 × 10⁶⁶ |
+| 21-word BIP39 | 210 bits | 1.65 × 10⁶³ |
+| 24-word BIP39 / Electrum | 240 bits | 1.77 × 10⁷² |
+| 33-word SLIP39 | 363 bits | 1.88 × 10¹⁰⁹ |
 
 Notes:
 
 - **Positions across salts**: the layout dimension only opens up when the salt changes, contributing up to `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
-- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 8,192 candidates per cell. The reduction is under 0.07%.
+- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 1,024 candidates per cell. The reduction is under 0.5%.
 - **No salt**: the grid is left in natural reading order and no color permutation is applied, but the per-word color count is unchanged.
 
 ---
@@ -171,12 +173,8 @@ Validation is a blocklist, not an allowlist: any forbidden chunk causes immediat
 
 ### Color Mode
 
-- Must be **RGB** (3 channels) or **RGBA** (4 channels) with alpha fixed at `255`.
-- **Bit Depth**: Varying bit depths are acceptable only if they are semantically/exactly identical to standard 8-bit channels upon extraction.
-- **Strictly Prohibited**:
-  - Custom color models or color profiles (e.g., **Adobe RGB**).
-  - **Monochromatic** / Grayscale images.
-- All channel values must be integers from `0` to `255`.
+- **RGB** or **RGBA** with every alpha value at `255`. Grayscale, palette and other color models are rejected, and so is an embedded color profile such as **Adobe RGB**.
+- Other bit depths pass only if they read back as exactly the same 8-bit values.
 
 ### Cell Integrity
 
@@ -191,7 +189,7 @@ Every pixel within a single grid cell must be **exactly the same color**. Any va
 
 ### Terminal
 
-Spicebag draws a full-screen interface and leans on four terminal capabilities. Each one degrades on its own, so a terminal missing some of them still runs the app:
+The TUI app draws a full-screen interface and leans on four terminal capabilities. Each one degrades on its own, so a terminal missing some of them still runs the app:
 
 | Capability | Used for | Without it |
 |---|---|---|
@@ -218,23 +216,13 @@ On Windows, 1.18 is the release where Windows Terminal began answering palette q
 
 **Known limitations.** Spicebag still runs on all of these. They cost comfort, not function:
 
-- **macOS Terminal.app** caps out at 256 colors. Gradients band and neighboring cells can render as the same color, which matters because cell colors carry the encoded data. It also does not implement OSC 8, so saved files are not clickable: Terminal.app linkifies literal URLs for <kbd>Cmd</kbd>-click, but Spicebag shows the filename with the `file://` target behind it, leaving no visible URL to detect. Use one of the macOS entries above instead.
-- **Windows legacy console host (`conhost.exe`)** handles 24-bit color but answers no palette queries, so screenshots use the fallback. It has no OSC 8 support either, so <kbd>Ctrl</kbd>-clicking a saved file does nothing. It also intercepts some control keys before the app sees them, which is why the screenshot shortcut is <kbd>F12</kbd> rather than a Ctrl combination.
+- **macOS Terminal.app** caps out at 256 colors, so gradients band and neighboring cells can render as the same color, which matters because cell colors carry the encoded data. It has no OSC 8 either, so saved files are not clickable. Use one of the macOS entries above instead.
+- **Windows legacy console host (`conhost.exe`)** handles 24-bit color but answers no palette queries, so screenshots use the fallback, and it has no OSC 8, so saved files are not clickable. It also intercepts some control keys, which is why the screenshot shortcut is <kbd>F12</kbd>.
 - **tmux and screen** hide palette queries from the terminal underneath and need explicit configuration for 24-bit color. Under tmux, set `terminal-features` for your terminal and enable `allow-passthrough`.
 
+In the legacy console host, or in any terminal that does not advertise 24-bit color through `COLORTERM`, a notice under the header names the terminal and its version and recommends [CLI mode](#cli-mode), which needs none of the capabilities above.
+
 Block glyphs (`█ ▀ ▂ ░`) and box-drawing characters are used throughout, so pick a monospace font that includes the Block Elements range. Cascadia Code, JetBrains Mono, Fira Code, and any Nerd Font patch all qualify.
-
-### Dependencies
-
-```
-typer
-rich
-textual
-pillow
-mnemonic
-shamir-mnemonic
-argon2-cffi
-```
 
 ---
 
@@ -244,7 +232,13 @@ argon2-cffi
 pip install spicebag
 ```
 
-This installs the `spicebag` command on your PATH. Run it with no arguments to open the TUI, which is the only interface to encoding and decoding.
+This installs the `spicebag` command on your PATH. Run it with no arguments to open the TUI app, or with a flag such as `--encode` to use [CLI mode](#cli-mode).
+
+If `spicebag` is not recognized after installing, pip placed it in a Scripts folder that is not on your PATH, which is common with the Microsoft Store Python and `--user` installs. `python -m spicebag` runs the same program without it, and [pipx](https://pipx.pypa.io) installs it with PATH handled for you: `pipx install spicebag`, then `pipx ensurepath`.
+
+### Windows executable
+
+Every [GitHub Release](https://github.com/Enkhoder/Spicebag/releases) from 4.0.0 on carries a standalone `spicebag.exe` that needs no Python. Download it and run it from a terminal, as `.\spicebag.exe` or `.\spicebag.exe --encode`. It is not code-signed, so Windows SmartScreen may warn the first time it runs.
 
 ### From source
 
@@ -256,7 +250,7 @@ cd Spicebag
 run.bat
 ```
 
-`run.bat` creates `.venv/`, installs `requirements.txt`, verifies dependencies, and launches the app.
+`run.bat` creates `.venv/`, installs `requirements.txt`, checks for missing dependencies, and launches the app.
 
 To set it up on Linux and macOS, where `run.bat` does not apply:
 
@@ -264,17 +258,16 @@ To set it up on Linux and macOS, where `run.bat` does not apply:
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-export PYTHONPATH=.              # Windows: set PYTHONPATH=.
-python spicebag/app/cli.py
+python -m spicebag
 ```
 
-All imports are absolute (`from spicebag.xxx import yyy`), so `PYTHONPATH` must include the repository root. Editors that do not read `PYTHONPATH` need the repository root added to their own analysis path, or you can `pip install -e .` and skip the variable entirely.
+Run it from the repository root. `pip install -e .` instead installs the `spicebag` command against the checkout.
 
 ---
 
 ## Usage
 
-### Interactive TUI
+### TUI app
 
 Run with no arguments to open the full-screen interface:
 
@@ -294,7 +287,27 @@ Type a command at the prompt:
 | `clear` | Clear the scrollback |
 | `exit` | Quit |
 
-The encode flow prompts in order for image count, word count, phrase, salt, cell size, and save path. A single-image encode then shows a clickable color-space preview before writing the file.
+Pressing <kbd>ESC</kbd> twice within a second at the menu also quits. An <kbd>ESC</kbd> less than half a second after the previous one never counts toward it, so a burst of <kbd>ESC</kbd> that steps back out of a flow or closes the help screen cannot quit by accident.
+
+The encode flow prompts in order for image count, phrase, salt, salt confirmation, cell size, and save path. A single-image encode then shows a clickable color-space preview before writing the file.
+
+### CLI mode
+
+Encode, decode and list cell colors straight from the shell, without opening the TUI app:
+
+```bash
+spicebag --encode   # or -e
+spicebag --decode   # or -d
+spicebag --palette  # or -p
+```
+
+Encode asks for the image count, seed phrase, salt, salt confirmation, cell size and save path. Decode asks for the image path and salt. Palette asks for the seed phrase, salt and cells. The seed phrase, the salt and its confirmation use native terminal masking, so nothing appears while you type. A rejected answer repeats the prompt with the reason in front of it.
+
+Encode and decode then ask `Proceed? (y/n)` before doing any work. `y` or `yes` continues. `n`, `no` or three answers that are neither, plain ENTER included, end the run without writing anything. Case is ignored. <kbd>Ctrl</kbd>+<kbd>C</kbd> aborts at any step. Save paths follow the TUI app's rules, with `~` as your home folder, and `spicebag --help` lists them.
+
+A decoded seed phrase is never printed. Decode reports what it recovered and asks before copying the phrase to the clipboard, so answering `N` checks an image and salt without exposing the phrase. On Windows the copy is kept out of clipboard history and cloud sync. macOS uses `pbcopy` and Linux uses `wl-copy` (Wayland), and neither can opt out of clipboard managers or Universal Clipboard, so clear the clipboard once you are done. Under WSL, the clipboard is mirrored to Windows and the mirror reads the phrase the moment it is offered, using up the one paste before you can make it, so decode and palette skip the copy question and report `Clipboard unavailable for WSL.` instead.
+
+Palette lists every color each chosen cell can take for that phrase and salt, sorted ascending under headers like `Cell [0][2]` (row, then column, counted from 0), and asks before copying the list. Cells are row and column pairs, such as `0 2 3 1` for `[0][2]` and `[3][1]`, and either index can be a range in either direction, so `0-2 1-2` covers rows 0 to 2 in columns 1 and 2. `*` or plain ENTER takes every cell, and a cell picked twice is copied once. The list gives away the seed phrase as surely as the phrase itself, so it is never printed and takes the same clipboard path as decode.
 
 ### Output location
 
@@ -308,23 +321,23 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 > Spicebag provides **no protection** against malware, keyloggers, screen capture, coercion, or any form of surveillance. Use it only in a secure, private environment.
 
 - **An unsalted image protects nothing.** Anyone who gets hold of it can read the seed phrase back with a color picker and the public wordlist (see [Manual Decoding](#manual-decoding)). Treat it exactly like the phrase written on paper, and use a salt for any image you cannot keep physically secure.
-- **Salt** is processed with **Argon2id** (`time_cost=4`, `memory_cost=256 MB`) making brute-force infeasible.
+- **Salt** is processed with **Argon2id** (`time_cost=4`, `memory_cost=256 MiB`), which makes every guess slow but cannot rescue a guessable salt. Use a long, random one.
 - All randomness for color offsets uses Python's `secrets` module (CSPRNG).
 - The salt is **not stored** anywhere. Losing it means the image cannot be decoded.
 
 ---
 
-## Performance & Bulk Generation
+## Bulk Generation
 
-- **Algorithmic Separation**: Bulk image generation (`bulkEncodeMnemonic`) decouples the color space calculations from the resolution upscaling. This minimizes memory overhead during logic generation.
-- **Strictly Unique Colors**: Offsets for cells are sampled without replacement using `secrets.SystemRandom().sample` (out of the 8192 available colors for BIP39) to mathematically guarantee that all bulk-generated images use unique cell colors.
-- **Optimized PNG Encoding**: High-resolution cell scaling (e.g. 2000px per cell) processes massive amounts of pixel data. The bulk encoder uses a fast compression level (`compress_level=1`) to yield a ~43% execution speedup, dropping bulk generation times significantly.
+- A bulk encode builds every image at one pixel per cell first, and scales each one to the cell size only as it is written into the ZIP.
+- The free bits of each cell's offset are drawn without replacement (`secrets.SystemRandom().sample`), so up to 1,024 images per archive (2,048 for SLIP39) never repeat a cell's color. Past that, cell colors can repeat, though two identical images remain vanishingly unlikely.
+- PNGs are written with the fast `compress_level=1`, trading file size for speed at large cell sizes.
 
 ---
 
 ## Contributing
 
-[`docs/ARCHITECTURE.md`](https://github.com/Enkhoder/Spicebag/blob/main/docs/ARCHITECTURE.md) maps the codebase layer-by-layer and documents the invariants that are not obvious from reading a single file, such as randomness source, single-sourced tables, and seed phrase handling in logs. Read it before changing anything in `spicebag/core/` or `spicebag/utils/colors.py`.
+[`docs/ARCHITECTURE.md`](https://github.com/Enkhoder/Spicebag/blob/main/docs/ARCHITECTURE.md) maps the codebase layer-by-layer and documents the invariants that are not obvious from reading a single file, such as randomness source, single-sourced tables, and seed phrase handling in logs. Read it before changing anything in `spicebag/backend/`.
 
 ---
 
