@@ -234,7 +234,15 @@ pip install spicebag
 
 This installs the `spicebag` command on your PATH. Run it with no arguments to open the TUI app, or with a flag such as `--encode` to use [CLI mode](#cli-mode).
 
-If `spicebag` is not recognized after installing, pip placed it in a Scripts folder that is not on your PATH, which is common with the Microsoft Store Python and `--user` installs. `python -m spicebag` runs the same program without it, and [pipx](https://pipx.pypa.io) installs it with PATH handled for you: `pipx install spicebag`, then `pipx ensurepath`.
+If `spicebag` is not recognized after installing, pip placed it in a Scripts folder that is not on your PATH, which is common with the Microsoft Store Python and `--user` installs. `python -m spicebag` runs the same program without it. To run it as plain `spicebag`, install it with [pipx](https://pipx.pypa.io), which puts it on your PATH:
+
+```bash
+python -m pip install --user pipx
+python -m pipx install spicebag
+python -m pipx ensurepath
+```
+
+Open a new terminal once afterwards. The PATH change is permanent, so `spicebag` then works in every terminal, including after a restart.
 
 ### Windows executable
 
