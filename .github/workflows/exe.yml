@@ -1,0 +1,49 @@
+name: Windows executable
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  exe:
+    name: Build and attach spicebag.exe
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build the executable
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pyinstaller
+          python -m PyInstaller --noconfirm --onefile --console --name spicebag \
+              --collect-data spicebag --collect-data mnemonic --collect-data shamir_mnemonic \
+              --copy-metadata spicebag \
+              spicebag/__main__.py
+
+      - name: Smoke test the executable
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          dist/spicebag.exe --help
+          test "$(dist/spicebag.exe --version)" = "Spicebag ${TAG#v}"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/spicebag.exe --clobber

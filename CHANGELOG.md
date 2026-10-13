@@ -1,4 +1,4 @@
-Image encoding starts over. An unsalted image now stores every word as a literal chunk of the 24-bit color space, so a seed phrase can be read back from its PNG with a color picker and a wordlist, without Spicebag installed.
+Every image now proves its own seed phrase, so a wrong salt is rejected instead of quietly decoding to a different valid phrase. Spicebag also runs straight from the terminal: `spicebag --encode`, `--decode` and `--palette` work through plain prompts, with native masking for the seed phrase and salt. The TUI app itself gains a salt confirmation step and stops dragging the history to the bottom while a progress bar runs.
 
 ```bash
 pip install --upgrade spicebag
@@ -6,44 +6,69 @@ pip install --upgrade spicebag
 
 ### Breaking changes
 
-> **3.0.0 is a fresh start for images.** Every image encoded or decoded from this version on follows the new color rules, and images made by 1.x or 2.x do not decode here. Those images are not lost: they still decode on 2.x, so keep `pip install "spicebag<3"` in a separate virtual environment for as long as you rely on them.
+> **4.0.0 changes the image format, and images made by 3.x no longer decode.** They are not lost: they still decode on 3.x, so keep `pip install "spicebag<4"` in a separate virtual environment for as long as you rely on them, and re-encode them here.
 
-- **Unsalted words map onto literal hex chunks.** The 16,777,216 colors are split in order into one chunk per word, and a word's color always falls inside its own chunk. Word 1 of a 2048-word list (abandon) owns `#000000` to `#001FFF`, word 2 owns `#002000` to `#003FFF`, and the last word owns `#FFE000` to `#FFFFFF`. The 1024-word SLIP39 list uses chunks of 16,384. Cells still run left to right, top to bottom.
-- **`RGB_VALUE_SHIFTS` and `PERMUTATIONS` are removed.** The fixed per-position channel shifts and the six channel permutations sat between the word index and the color, hiding the chunk structure. `encodeWord` and `decodeColor` take `colorTables` in place of `shift` and `mask`, and `ColorSpace` carries `colorTables` in place of `shifts` and `masks`.
-- **Salted colors scatter across the whole color space.** With a salt, the 24-bit value passes through a salt-keyed permutation before it becomes the color: a 10-round Feistel network whose round keys come from the Argon2id master key through HKDF. Each word still owns exactly 8,192 colors (16,384 for SLIP39) and no color belongs to two words, but those colors are spread pseudo-randomly over all 16,777,216 instead of sitting in one slice, so rerolling a salted cell can land on any hue. The per-position XOR mask is gone: within one salt a word keeps the same color set in every cell, and the salt-seeded cell shuffle still hides word positions. The number of colors per word is unchanged, so every phrase and salt still has as many distinct images as before.
+- **Proof-of-phrase.** Until now a wrong salt was only caught by the seed phrase's own checksum, which a random 12-word phrase passes about one time in fifteen. A mistyped salt, even a single stray keystroke, could decode an image to a different phrase that looked perfectly valid. Each cell now carries 3 bits of an HMAC-SHA256 over the whole phrase, keyed by a third HKDF subkey of the salt, in the top of its random block offset. The decoder recomputes it and rejects any mismatch: a wrong salt now slips through a 12-word image about one time in 10¹², and far less often for longer phrases.
+- **Clearer decode errors.** A wrong salt reads `Salt is incorrect.`, a salted image decoded without its salt reads `Image is salted or predates v4.0.0.`, since an image made before 4.0.0 fails the same way, and an unsalted image decoded with a salt reads `Salt is incorrect.` instead of sometimes producing a phrase: the decoder handles it exactly like a wrong salt, so it never reveals that an image is unsalted.
+- **Altered images are caught.** Swapping two cells, even two holding the same word, or changing a cell's word breaks the proof. Mixing cells between images of the same phrase and salt still decodes, since they carry the same proof.
+- **Fewer free colors per cell.** The proof takes 3 of each offset's bits, so once a phrase and salt are fixed a cell can take 1,024 colors (2,048 for SLIP39) instead of 8,192 (16,384). A 12-word phrase still has about 1.3×10³⁶ distinct images per salt. Manual decoding of unsalted images is unchanged, because the proof lives in bits it already ignores.
+- **Salts are normalized to Unicode NFC** before key derivation, so an accented salt typed as one composed character or as a letter plus a combining mark is the same salt. A salt made only of such decomposed characters encodes differently than it did on 3.x.
 
-### Manual decoding
+### CLI mode
 
-The README has a new [Manual Decoding](README.md#manual-decoding) section that walks through reading an unsalted image by hand: find the wordlist from the aspect ratio, read each cell's hex code, and compute the word number from red and green alone (`R × 8 + ⌊G ÷ 32⌋ + 1`, or `R × 4 + ⌊G ÷ 64⌋ + 1` for SLIP39). An unsalted image no longer depends on Spicebag, or on any software at all, still being around to read it.
+- **`spicebag --encode` / `-e`** asks for the image count, seed phrase, salt, salt confirmation, cell size and save path, then writes the image or ZIP and prints its filename as a clickable link to the file.
+- **`spicebag --decode` / `-d`** asks for the image path and salt, reports the recovered seed phrase's length and standard, then asks whether to copy it to the clipboard. The phrase is never printed, and answering `N` checks an image and salt without exposing the phrase anywhere. If the clipboard cannot be written, the run fails rather than showing it.
+- **`spicebag --palette` / `-p`** asks for the seed phrase, salt and cells, then offers to copy every color each chosen cell can take, sorted ascending under `Cell [row][col]` headers counted from 0. Cells are row and column pairs, each index a number or a range like `0-2` or `3-1`, with `*` or a blank answer for every cell. The list identifies the phrase as surely as the phrase itself, so it is never printed and goes through the same one-paste clipboard as decode.
+- The seed phrase, the salt and its confirmation are read with native terminal masking, so nothing appears while typing.
+- A rejected answer repeats the prompt with a short reason in front of it, such as `Invalid word count`, `Checksum failed`, `Salt does not match`, `Dir not found`, `PNG only` or `Dirty cells`. Three mismatched salt confirmations start the salt over. The image is fully validated before the salt is asked for.
+- Encode and decode end with `Proceed? (y/n)`. `y` or `yes` continues, in any case. `n` or `no` ends the run without writing anything, as do three answers that are neither, a plain ENTER included. Every abort prints `Operation aborted.` A blank answer where none is accepted is asked again without a message, and the third in a row ends the run.
+- Typed answers keep the terminal's default color, like any native prompt. Errors use its bright red, and the progress bar steps through the brand gradient while encoding and its inverse while decoding, in 256 colors, with a live stopwatch. In a window narrower than the line, the bar wraps at full length and each redraw still replaces the last.
+- Pasting into any prompt clears the clipboard once the answer is read, so a pasted seed phrase or salt does not stay behind.
+- <kbd>Ctrl</kbd>+<kbd>C</kbd> aborts at any step with exit status 130. An encode interrupted mid-write removes its unfinished file.
+- Save paths follow the TUI app's rules, including the `//` separator, and **a leading `~` is the home folder** in every save and image path, in the TUI app too.
+- On Windows the clipboard copy is kept out of clipboard history and cloud sync. macOS uses `pbcopy` and Linux uses `wl-copy`. Under WSL, whose clipboard mirror would use up the one paste, decode and palette report `Clipboard unavailable for WSL.` instead of asking to copy.
 
-### Interface
+### TUI app
 
-- The help screen explains the color chunks under HOW THIS WORKS, with abandon and ability as worked ranges, and labels the ENCODE image sample as unsalted: rerolling a cell keeps its color inside the same word's chunk. Its salting paragraph explains that a salt scatters each word's colors across the whole color space.
-- An unknown command in the main menu reads `No such command: <input>`.
+- **Double ESC exits.** At the main menu, ESC shows `Press ESC again to exit`, and a second ESC within a second closes Spicebag. An ESC less than half a second after the previous one never arms it, so a burst of ESC that steps back out of a flow or closes the help screen cannot quit by accident.
+- **Limited/legacy terminal notice.** In the classic Windows console host, or in a terminal that does not advertise truecolor, the header names the terminal and its version and recommends CLI mode instead.
+- **No word count step.** Encode goes straight from the image count to the seed phrase, whose length decides the standard. The status bar counts words as `Word n`, typing and pasting stop at 33 words, and a phrase of an unsupported length reads `Invalid word count.`, stacked in front of the masked words as `Invalid word count, invalid seed words: ···` when some are not in any wordlist.
+- **Image salt is confirmed.** After entering an image salt, encode asks to confirm it, masked like the first entry and with the same status bar. A mismatch reads `Salt does not match.` and asks again. This happens with no salt as well, where confirming means pressing ENTER again.
+- **Progress no longer scrolls the screen.** While an encode or decode runs, scrolling up through the history stays put. The view jumps to the bottom only when the run reaches 100%, fails, or is stopped with `cancel`.
+- **Resizing keeps your place.** Changing the window size no longer jumps to the bottom unless the view was already there, and the ASCII art banner keeps its shape in a narrow window, running off the right edge instead of wrapping into broken rows.
+- **Paths are shown in the history.** The save path and the image path are logged as typed, minus surrounding spaces, with ENTER on the save path logging the default folder, and screenshots no longer blank them. The seed phrase and salts stay masked.
+- **Pasting clears the clipboard.** Any paste into the TUI app empties the system clipboard, so a pasted seed phrase or salt does not stay behind.
+- **Default filenames no longer describe their contents.** A single image saves as `20260930_123456.png` and a bulk archive as `x1000_20260930_123456.zip`, instead of names that announced a seed image and its word count. The output folders are now `~/Spicebag/images` and `~/Spicebag/screenshots`, renamed from `encoded-images` and `app-screenshots`. Files already in the old folders stay there.
+- Minor UX and quality-of-life updates and fixes.
 
-### Command line
+### Flags
 
-- `spicebag --help` and `spicebag -h` print a compact usage block with no blank lines.
-- Any argument that is not one of the four flags stops the run before the interface starts. It prints `No such option: <input>` for a token starting with `-` and `No such command: <input>` for anything else, followed by `spicebag --help` and `spicebag -h`, and exits with status 2. Whole tokens are checked, so a stray word after `-h` is an error instead of being ignored, and combined short flags such as `-hV` are rejected.
+- `spicebag --help` lists `--encode`, `--decode` and `--palette` and adds short Save paths, Decode paths and Palette cells sections.
+- `python -m spicebag` runs Spicebag when the `spicebag` command is not on PATH.
+- A mistyped flag gets a suggestion: `spicebag --encofe` prints `Did you mean --encode?`, and a bare `spicebag encode` points at `--encode` too. Nothing runs until the flag is typed correctly. The error no longer lists the two help invocations after it.
 
-### Performance and memory
+### Installation
 
-- **Cell integrity is checked cell by cell instead of pixel by pixel.** Decoding asks Pillow for the colors inside a cell and stops the moment a second one appears, rather than walking every pixel in Python. A 2000px-per-cell image is checked in under a second instead of a couple of minutes, and the same files are accepted and rejected as before.
-- **Finished output is frozen.** A command that has finished can no longer change, so the main menu draws it once and keeps the picture, redrawing it only when the window gets narrower. That is why encoding and decoding now run at the same speed in a long session as in a fresh one: with fifty commands of history, a redraw takes 0.44 ms instead of 239 ms.
-- **Masked output is dropped from memory.** Masking used to be a picture drawn over words the program still held. Now, when a command finishes, its decoded words, invalid word notes and image sample colors are released along with the rest of the block, and only the masked picture is kept.
-- The installed version string is read from the package metadata once per session rather than on every mouse move.
+- Every GitHub Release from 4.0.0 on carries a standalone `spicebag.exe` for Windows that needs no Python. It is not code-signed, so SmartScreen may warn on first launch.
+- A source checkout runs with `python -m spicebag`, and so does `run.bat`, so `PYTHONPATH` no longer needs setting.
+- Python 3.14 is supported.
+
+### Privacy hardening
+
+- A crash prints its traceback without the values of local variables, which could hold the seed phrase or salt. Textual's crash output showed them, and so does Typer's on versions that default to it.
+- Every `TEXTUAL*` environment variable is cleared at startup. `TEXTUAL_LOG` made Textual write every keystroke and input change to a file, and `TEXTUAL_SCREENSHOT` saved an unmasked screenshot.
 
 ### Examples and tests
 
-- Every decodable image in [`examples/images/`](examples/images) is re-encoded from the same phrases and salts, so `tests/smoke.py` and the release job's decode check both run against the new format.
-- The images kept as rejection cases are named for what they test: `Corrupted-png-compressed-pixels.png` for cells that are no longer one flat color, `Corrupted-png-invalid-aspect-ratio.png` for a shape that matches no grid, and `Corrupted-png-invalid-color-space.png` for an alpha channel that is not fully opaque.
+- Every decodable image in [`examples/images/`](examples/images) is re-encoded in the new format from the same phrases and salts, and `24-interchanged-seed-Enkhoder.png` is rebuilt from cells of two images of one phrase and salt.
+- `Previous-format-3.0-undecodable.png` keeps a 3.0 image as a regression case that must be rejected.
+- `tests/smoke.py` checks that wrong salts, a missing salt and a superfluous salt are all rejected, and round-trips 15, 18 and 21-word phrases, which no fixture covers.
 
 ### Platform testing
 
-CI runs the encode and decode round trip on every change on Linux (Python 3.10 and 3.13), Windows (3.12) and macOS (3.12), so the new color transform is covered on all three platforms. The interface is verified on Windows only. The per-OS code that 2.0.0 disclosed as unverified is unchanged and still has not run on real macOS or Linux hardware: the POSIX half of the palette probe in `utils/terminalColors.py`, the OSC 0 window-title fallback in `app/cli.py`, and the Linux and macOS network detection in `utils/networkDetect.py`. Each degrades to a safe default rather than raising. Reports from macOS and Linux users close that gap fastest: [open an issue](https://github.com/Enkhoder/Spicebag/issues).
+The TUI app and CLI mode are verified on Windows, and under WSL on Ubuntu, Fedora and Arch. WSL exercises neither the Linux clipboard nor the Linux network detection. The CLI mode clipboard on macOS (`pbcopy`) and Linux (`wl-copy`) has not run on real hardware, and neither has the per-OS code disclosed in earlier releases: the POSIX half of the palette probe in `frontend/utils/terminalColors.py`, the OSC 0 window-title fallback in `frontend/entry.py`, and the Linux and macOS network detection in `frontend/utils/networkDetect.py`. The same goes for the `COLORTERM` check behind the limited terminal notice in `frontend/utils/limitedTerminal.py`. Reports from macOS and Linux users close that gap fastest: [open an issue](https://github.com/Enkhoder/Spicebag/issues).
 
 ### Documentation
 
-- [`README.md`](README.md): the Manual Decoding section, a Security Considerations warning that an unsalted image protects nothing, How It Works and Configuration Space rewritten around the two-step color transform, and the banner mascot's belt split between the brand gradient and its inversion
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the color transform with its salted Feistel permutation, why the unsalted path takes no transform after the block offset, the command line's input check, how both screens draw through the Strip based log, and the invariant that a finished block is frozen and its nodes released
-- [`SECURITY.md`](SECURITY.md): reading an unsalted image by hand is listed as out of scope, since it is intentional by design
+- [`README.md`](README.md): a CLI mode section under Usage, why every block offset gives a distinct color under the salted permutation, what to do when `spicebag` is not on PATH, and the Windows executable
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the proof-of-phrase and its place in the file format, CLI mode and the clipboard writer, the new flags, and the salt confirmation state

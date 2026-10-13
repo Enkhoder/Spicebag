@@ -35,11 +35,13 @@ Deliberately invalid images, kept as decoder regression cases:
 | `Corrupted-png-invalid-aspect-ratio.png` | width to height ratio matches no grid |
 | `Corrupted-png-invalid-color-space.png` | five cells carry partial alpha instead of a fully opaque channel |
 | `First-image-generated-using-old-algorithm-undecodable.png` | produced by a superseded encoding algorithm |
+| `Previous-format-3.0-undecodable.png` | a 3.0 image, which carries no proof of phrase |
 
 ## Usage
 
-Start the interface, type `decode`, and give it a path from the table above along with the matching salt. There is no command-line decode subcommand: a salt passed as an argument would be left behind in the shell history.
+Run `spicebag --decode`, or start the interface and type `decode`, then give it a path from the table above along with the matching salt.
 
 ```bat
+spicebag --decode
 run.bat
 ```

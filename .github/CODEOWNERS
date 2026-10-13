@@ -7,9 +7,7 @@
 
 # The encoding, key derivation and decoder. A wrong change here silently
 # produces images that cannot be decoded, or leaks a seed phrase.
-/spicebag/core/         @Enkhoder
-/spicebag/utils/        @Enkhoder
-/spicebag/constants/    @Enkhoder
+/spicebag/backend/      @Enkhoder
 
 # Packaging metadata and the dependency set.
 /pyproject.toml         @Enkhoder
