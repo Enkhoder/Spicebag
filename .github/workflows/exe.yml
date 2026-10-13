@@ -32,7 +32,7 @@ jobs:
           python -m pip install . pyinstaller
           python -m PyInstaller --noconfirm --onefile --console --name spicebag \
               --collect-data spicebag --collect-data mnemonic --collect-data shamir_mnemonic \
-              --copy-metadata spicebag \
+              --copy-metadata spicebag --icon docs/assets/spicebag.ico \
               spicebag/__main__.py
 
       - name: Smoke test the executable
