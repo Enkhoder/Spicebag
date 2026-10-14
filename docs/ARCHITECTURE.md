@@ -73,7 +73,7 @@ spicebag/
 │       ├── terminalColors.py live terminal palette probe, per-OS
 │       └── limitedTerminal.py limited terminal detection for the header notice
 └── backend/
-    ├── colors.py           key derivation, the color transform, the proof of phrase
+    ├── colors.py           key derivation, the color transform, the proof-of-phrase
     ├── generator.py        encode, bulk encode, interactive ColorSpace
     ├── decoder.py          PNG validation, decode
     ├── paths.py            save and image path parsing, filename validation
@@ -125,7 +125,7 @@ A terminal resize rebuilds the live block and re-wraps frozen blocks only when t
 
 ### Backend (`backend/`)
 
-`colors.py` holds the key derivation, the color transform and the proof of phrase, described below.
+`colors.py` holds the key derivation, the color transform and the proof-of-phrase, described below.
 
 `generator.py`
 
@@ -156,7 +156,7 @@ A terminal resize rebuilds the live block and re-wraps frozen blocks only when t
 
 Each word index becomes one RGB triple through two reversible steps, in `backend/colors.py`:
 
-1. **Block offset**: `wordIndex * blockSize + offset` packs the index into the high bits of a 24-bit value. The offset below it carries `PROOF_BITS` (3) bits of the proof of phrase on top and randomness in the rest: `composeOffset(proofChunk, free)`.
+1. **Block offset**: `wordIndex * blockSize + offset` packs the index into the high bits of a 24-bit value. The offset below it carries `PROOF_BITS` (3) bits of the proof-of-phrase on top and randomness in the rest: `composeOffset(proofChunk, free)`.
 2. **Color permutation**: with a salt, `permuteColor()` runs the value through a 10-round balanced Feistel network over its two 12-bit halves, keyed by the salt. Without a salt this step is skipped.
 
 Without a salt the 24-bit value is the color itself, split into R, G and B, so word index `n` always lands in `[n * blockSize, (n + 1) * blockSize)` and a cell can be read back by hand from its hex code. Keep it that way: the unsalted path must never gain a transform after step 1, or manual decoding of unsalted images breaks.
@@ -165,7 +165,7 @@ With a salt, the permutation scatters each word's `blockSize` colors pseudo-rand
 
 Every step is a bijection, so `offset → color` is injective: 8,192 distinct colors per word for BIP39 and Electrum, 16,384 for SLIP39, with no collisions. Once a phrase and salt are fixed, the proof chunk pins 3 of the offset bits, leaving `computeFreeSize()` colors per cell: 1,024 for BIP39 and Electrum, 2,048 for SLIP39. Several things depend on injectivity, including the termination guarantee for the `while` loop in `rerollCell()`, which walks the free bits only.
 
-### Proof of phrase
+### Proof-of-phrase
 
 `computeProof(proofKey, wordIndices)` takes HMAC-SHA256 of the word indices under the proof key and cuts it, in word order, into one 3-bit chunk per word. Each chunk rides in the top of its word's offset. `decodeCell()` returns the index and the chunk; the decoder rebuilds the phrase, recomputes the proof and compares every chunk. A wrong salt gives junk indices, junk chunks and a different key, so it passes a 12-word image one time in 2^36 on top of the checksum, where the checksum alone let about one in fifteen through.
 
@@ -181,7 +181,7 @@ The proof depends on the phrase and the key only, never on the free bits. Every 
 |-----|----------|
 | `colorKey` | `deriveColorTables()` turns it into the Feistel round tables, which `deriveSubkeys()` returns in its place |
 | `permKey` | `permKey[:8]` seeds a `random.Random` that shuffles grid-cell positions |
-| `proofKey` | 32 bytes under the `proofDomain` label, the HMAC key of the proof of phrase |
+| `proofKey` | 32 bytes under the `proofDomain` label, the HMAC key of the proof-of-phrase |
 
 Each Feistel round function is the first 12 bits of HMAC-SHA256 over the round number and a 12-bit half. A half has only 4,096 possible values, so every round output is precomputed once per salt into a 4,096-entry table, and a permutation costs ten lookups instead of ten HMACs. That keeps a 2,000-image salted bulk encode within a few seconds.
 
