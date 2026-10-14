@@ -1,8 +1,8 @@
 ######## LIBRARIES ########
 
 from spicebag.frontend.theme import (
-    COMMANDS, BANNER_META, AppState, OUTPUT_DIR, IMAGES_DIR, SCREENSHOTS_DIR, DEFAULT_CELL_PX, PROGRESS_BAR_LENGTH,
-    C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM,
+    COMMANDS, BANNER_META_PREFIX, AppState, OUTPUT_DIR, IMAGES_DIR, SCREENSHOTS_DIR, DEFAULT_CELL_PX, PROGRESS_BAR_LENGTH,
+    C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM, getBannerMeta, metaHoverFrameCount,
     blendHexColors, getMascotBanner, gradientColor, bannerGradientHex, ASCII_ART_BANNER, getNetworkText, getVersion,
     bannerHoverFrameCount, formatElapsed, matchCommand, SCREENSHOT_KEY, EXIT_ESC_WINDOW, LIMITED_TERMINAL_NOTICE
 )
@@ -785,14 +785,17 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._hoverIdleTimer = asyncio.get_event_loop().call_later(3.0, self._clearWordHover)
 
         versionStr = getVersion()
-        startCol = 16
-        endCol = 25 + len(versionStr)
-
-        if self._useMascotBanner and line == 1 and startCol <= col <= endCol:
-            self._setBannerHover(True)
+        if self._useMascotBanner:
+            bannerLine = 1
+            startCol = 16
+            endCol = 25 + len(versionStr)
 
         else:
-            self._setBannerHover(False)
+            bannerLine = len(ASCII_ART_BANNER.strip("\n").split("\n"))
+            startCol = 2 + len(BANNER_META_PREFIX)
+            endCol = startCol + len(versionStr) + (2 if self._bannerHoverPhase != -1 else 0)
+
+        self._setBannerHover(line == bannerLine and startCol <= col <= endCol)
 
         changed = False
 
@@ -848,7 +851,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._stopMascotAnimation()
             self._welcome = [
                 self._getGradientBanner(),
-                self._indented(BANNER_META),
+                self._indented(getBannerMeta(self._bannerHoverPhase)),
                 self._indented(getNetworkText(self._netState)),
             ]
 
@@ -984,18 +987,30 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._rebuild(scrollToEnd=False)
 
 
+    def _refreshBanner(self) -> None:
+        if self._useMascotBanner:
+            self._refreshMascotBanner()
+            return
+
+        if len(self._welcome) < 2:
+            return
+
+        self._welcome[1] = self._indented(getBannerMeta(self._bannerHoverPhase))
+        self._rebuild(scrollToEnd=False)
+
+
     def _setBannerHover(self, hovered: bool) -> None:
         if hovered:
             if self._bannerHoverPhase == -1:
                 self._bannerHoverPhase = 0
-                self._refreshMascotBanner()
+                self._refreshBanner()
                 if self._bannerHoverTimer is None:
                     self._bannerHoverTimer = asyncio.get_event_loop().call_later(0.1, self._bannerHoverTick)
 
         else:
             if self._bannerHoverPhase != -1:
                 self._bannerHoverPhase = -1
-                self._refreshMascotBanner()
+                self._refreshBanner()
                 if self._bannerHoverTimer is not None:
                     self._bannerHoverTimer.cancel()
                     self._bannerHoverTimer = None
@@ -1003,8 +1018,9 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     def _bannerHoverTick(self) -> None:
         if self._bannerHoverPhase != -1:
-            self._bannerHoverPhase = (self._bannerHoverPhase + 1) % bannerHoverFrameCount()
-            self._refreshMascotBanner()
+            frameCount = bannerHoverFrameCount() if self._useMascotBanner else metaHoverFrameCount()
+            self._bannerHoverPhase = (self._bannerHoverPhase + 1) % frameCount
+            self._refreshBanner()
             self._bannerHoverTimer = asyncio.get_event_loop().call_later(0.05, self._bannerHoverTick)
 
 
