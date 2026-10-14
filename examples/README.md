@@ -35,7 +35,7 @@ Deliberately invalid images, kept as decoder regression cases:
 | `Corrupted-png-invalid-aspect-ratio.png` | width to height ratio matches no grid |
 | `Corrupted-png-invalid-color-space.png` | five cells carry partial alpha instead of a fully opaque channel |
 | `First-image-generated-using-old-algorithm-undecodable.png` | produced by a superseded encoding algorithm |
-| `Previous-format-3.0-undecodable.png` | a 3.0 image, which carries no proof of phrase |
+| `Previous-format-3.0-undecodable.png` | a 3.0 image, which carries no proof-of-phrase |
 
 ## Usage
 

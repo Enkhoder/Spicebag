@@ -20,7 +20,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "4.0.0"
+        return "4.0.1"
 
 
 
@@ -49,6 +49,12 @@ CLIPBOARD_KEYS = frozenset({
     "ctrl+shift+left", "ctrl+shift+right",
     "ctrl+shift+home", "ctrl+shift+end",
     "cmd+c", "cmd+x", "cmd+v", "cmd+a",
+})
+
+MODIFIER_KEYS = frozenset({
+    "left_shift", "left_control", "left_alt", "left_super", "left_hyper", "left_meta",
+    "right_shift", "right_control", "right_alt", "right_super", "right_hyper", "right_meta",
+    "iso_level3_shift", "iso_level5_shift",
 })
 
 SCREENSHOT_KEY = "f12"
@@ -100,9 +106,7 @@ ASCII_ART_BANNER = """
                                                                           
 """
 
-BANNER_META = (
-    f"[{C_WHITE}]Visual Mnemonic Encoder / Decoder[/] [{C_DIM}][italic]v{getVersion()}[/]"
-)
+BANNER_META_PREFIX = "Visual Mnemonic Encoder / Decoder "
 
 MASCOT_BANNER = [
     " ▂▂ ▂ ▂ ▂ ",
@@ -152,6 +156,33 @@ def _hoverBannerText() -> str:
 
 def bannerHoverFrameCount() -> int:
     return 2 * (len(_hoverBannerText()) - 1)
+
+
+def _hoverMetaText() -> str:
+    return f" v{getVersion()} "
+
+
+def metaHoverFrameCount() -> int:
+    return 2 * (len(_hoverMetaText()) - 1)
+
+
+def getBannerMeta(hoverPhase: int) -> str:
+    """The ASCII banner's tagline. While hovered, the version is swept by a back-and-forth inverted brand gradient
+    background over the version padded by one cell on each side, its italic text a fixed C_WHITE like the help
+    page's hovered author name, so it never blends with the gradient."""
+    if hoverPhase == -1:
+        return f"[{C_WHITE}]{BANNER_META_PREFIX}[/][{C_DIM}][italic]v{getVersion()}[/]"
+
+    meta = f"[{C_WHITE}]{BANNER_META_PREFIX}[/]"
+    fullText = _hoverMetaText()
+    half = len(fullText) - 1
+    period = 2 * half
+    for i, char in enumerate(fullText):
+        p = (i - hoverPhase) % period
+        colorIdx = p if p <= half else period - p
+        meta += f"[italic {C_WHITE} on {invertedGradientHex(colorIdx / half)}]{char}[/]"
+
+    return meta
 
 
 def getMascotBanner(netState: tuple[bool, bool, bool], colPhases: list[int], hoverPhase: int) -> Table:

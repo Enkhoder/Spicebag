@@ -25,7 +25,7 @@
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
 - **Decode** a color-coded PNG back into the original seed phrase.
 - **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation scatters each word's colors across the whole color space and shuffles the grid, making the image unreadable without the salt.
-- **Proof of phrase**: every image carries an HMAC of its own phrase, so a wrong salt or an altered image is rejected instead of decoding to a different valid phrase.
+- **Proof-of-phrase**: every image carries an HMAC of its own phrase, so a wrong salt or an altered image is rejected instead of decoding to a different valid phrase.
 - **CLI mode**: `spicebag --encode`, `--decode` and `--palette` run as plain prompts, without the full-screen TUI app.
 - **Multi-standard support**:
 
@@ -43,7 +43,7 @@
 
 1. **Word → Index**: Each seed word is looked up in its standard's wordlist.
 2. **Salt Keys**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into a color key, a grid-shuffle key and a proof key.
-3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a block offset fills the low bits. The offset's top 3 bits carry a slice of the proof of phrase, an HMAC of the whole phrase under the proof key, and the rest is random. Without a salt, that value, split into R/G/B channels, is the cell's color. With a salt, a salt-keyed permutation first scatters it across the whole color space.
+3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a block offset fills the low bits. The offset's top 3 bits carry a slice of the proof-of-phrase, an HMAC of the whole phrase under the proof key, and the rest is random. Without a salt, that value, split into R/G/B channels, is the cell's color. With a salt, a salt-keyed permutation first scatters it across the whole color space.
 4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
 5. **Decoding**: reverses all steps: undo the permutation, look up each word by index, and check the proof slices against the rebuilt phrase. A wrong salt fails the proof instead of decoding to a different valid phrase.
 
@@ -106,10 +106,10 @@ Once the salt is fixed, almost everything is deterministic:
 |-----------|--------|-------|
 | Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed, one layout per salt |
 | Color permutation | 10-round Feistel network keyed by the salt | ❌ Fixed |
-| Proof of phrase | Top 3 bits of each block offset, from an HMAC of the phrase | ❌ Fixed |
+| Proof-of-phrase | Top 3 bits of each block offset, from an HMAC of the phrase | ❌ Fixed |
 | **Rest of the block offset** | `secrets.SystemRandom().randrange(blockSize >> 3)` | ✅ **Free** |
 
-The block offset occupies the low bits of the 24-bit value left over after the word index is packed into the high bits. Its top 3 bits carry the proof of phrase, so the rest of it is the only free variable:
+The block offset occupies the low bits of the 24-bit value left over after the word index is packed into the high bits. Its top 3 bits carry the proof-of-phrase, so the rest of it is the only free variable:
 
 ```
 blockSize = 1 << (24 - (maxIdx.bit_length() - 1))
