@@ -4,7 +4,7 @@ from spicebag.frontend.theme import (
     invertedGradientHex,
     bannerGradientHex,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
-    SCREENSHOT_KEY,
+    SCREENSHOT_KEY, MODIFIER_KEYS,
 )
 from spicebag.backend.generator import ColorSpace, precomputeColorSpace, rerollCell
 from spicebag.frontend.widgets.stripLog import StripLog, renderStrips
@@ -569,7 +569,7 @@ class HelpScreen(Screen):
 
             return
 
-        if time.time() < self._readyAt:
+        if event.key in MODIFIER_KEYS or time.time() < self._readyAt:
             return
 
         if self._imgTimer is not None:

@@ -20,7 +20,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "4.0.0"
+        return "4.0.1"
 
 
 
@@ -49,6 +49,12 @@ CLIPBOARD_KEYS = frozenset({
     "ctrl+shift+left", "ctrl+shift+right",
     "ctrl+shift+home", "ctrl+shift+end",
     "cmd+c", "cmd+x", "cmd+v", "cmd+a",
+})
+
+MODIFIER_KEYS = frozenset({
+    "left_shift", "left_control", "left_alt", "left_super", "left_hyper", "left_meta",
+    "right_shift", "right_control", "right_alt", "right_super", "right_hyper", "right_meta",
+    "iso_level3_shift", "iso_level5_shift",
 })
 
 SCREENSHOT_KEY = "f12"
