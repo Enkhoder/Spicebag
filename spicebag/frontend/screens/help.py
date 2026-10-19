@@ -4,7 +4,7 @@ from spicebag.frontend.theme import (
     invertedGradientHex,
     bannerGradientHex,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
-    SCREENSHOT_KEY, MODIFIER_KEYS, HOVERED_CELL_ROWS,
+    SCREENSHOT_KEY, MODIFIER_KEYS, HOVERED_CELL_ROWS, ARROW_STEPS,
 )
 from spicebag.backend.generator import ColorSpace, precomputeColorSpace, rerollCell
 from spicebag.frontend.widgets.stripLog import StripLog, renderStrips
@@ -12,6 +12,7 @@ from spicebag.frontend.tree import RootNode, TreeNode, renderBlocks
 from spicebag.backend.defaults import GRID_SIZES
 from textual.app import ComposeResult
 from typing import Optional, Sequence
+from textual.geometry import Region
 from textual.screen import Screen
 from textual.strip import Strip
 from rich.style import Style
@@ -436,6 +437,10 @@ class HelpLog(StripLog):
         line = event.y + self.scroll_offset.y
         col = event.x + self.scroll_offset.x
 
+        releaser = getattr(self.screen, "_releaseSampleOnClick", None)
+        if releaser is not None:
+            releaser(line, col)
+
         hitWord = getattr(self.screen, "_hitSeedWord", None)
         wordIdx = hitWord(line, col) if hitWord is not None else None
         if wordIdx is not None:
@@ -475,13 +480,30 @@ class HelpLog(StripLog):
             handler()
 
 
+    def watch_scroll_x(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_x(old_value, new_value)
+        self._releaseHiddenSelection()
+
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_y(old_value, new_value)
+        self._releaseHiddenSelection()
+
+
+    def _releaseHiddenSelection(self) -> None:
+        handler = getattr(self.screen, "_releaseHiddenSelection", None)
+        if handler is not None:
+            handler()
+
+
 
 ######## HELP SCREEN ########
 
 class HelpScreen(Screen):
     """Self-contained, single-column guide shown over the menu. Any key returns,
     leaving the menu underneath exactly as it was, except F12 which takes an
-    unmasked screenshot without closing the guide. The encode sample and decode
+    unmasked screenshot without closing the guide, and ENTER and the arrow keys
+    while a sample cell is selected. The encode sample and decode
     grid are live and behave like their real counterparts on the main menu. The
     log fills the screen with no padding or margin, so every line runs edge to edge."""
 
@@ -590,6 +612,10 @@ class HelpScreen(Screen):
         if event.key in MODIFIER_KEYS or time.time() < self._readyAt:
             return
 
+        if self._sampleSelectedCell is not None and (event.key == "enter" or event.key in ARROW_STEPS):
+            self._handleSampleKey(event.key)
+            return
+
         if self._imgTimer is not None:
             self._imgTimer.stop()
             self._imgTimer = None
@@ -606,6 +632,7 @@ class HelpScreen(Screen):
     def on_resize(self) -> None:
         if self.is_mounted:
             self._rebuild()
+            self.call_after_refresh(self._releaseHiddenSelection)
 
 
 
@@ -676,8 +703,8 @@ class HelpScreen(Screen):
     ######## INTERACTIVE SAMPLE ########
 
     def _setSampleSelection(self, cell: Optional[tuple[int, int]]) -> None:
-        """Show the clicked cell over the brand gradient sweep, until another cell is hovered or the sample masks.
-        Clicking the selected cell again keeps the sweep running where it is."""
+        """Show the clicked cell over the brand gradient sweep, until a click lands outside the sample, the cell scrolls
+        fully out of the window or the sample masks. Clicking the selected cell again keeps the sweep running where it is."""
         if cell == self._sampleSelectedCell:
             return
 
@@ -721,10 +748,58 @@ class HelpScreen(Screen):
         self._setSampleSelection(cell)
 
         self._imgRevision += 1
+        self._holdSample()
+        self._rebuild()
+
+
+    def _handleSampleKey(self, key: str) -> None:
+        """ENTER rerolls the selected cell and the arrow keys step the selection, wrapping around each edge of the
+        grid and scrolling the new cell into view, as in the real confirm-step preview."""
+        row, col = self._sampleSelectedCell
+        if key == "enter":
+            if rerollCell(self._imgColorSpace, row, col):
+                self._imgRevision += 1
+
+        else:
+            rowStep, colStep = ARROW_STEPS[key]
+            self._setSampleSelection(((row + rowStep) % self._sampleRows, (col + colStep) % self._sampleCols))
+
+        self._holdSample()
+        self._rebuild()
+        self.query_one("#help-log", HelpLog).scroll_to_region(
+            self._sampleCellRegion(self._sampleSelectedCell),
+            animate=False,
+            immediate=True
+        )
+
+
+    def _holdSample(self) -> None:
+        """Pause the auto-reshuffle for 3 seconds, then mask the sample unless another click or key comes first."""
         self._imgPausedUntil = time.time() + 3.0
         self._stopTimer("_graceTimer")
         self._graceTimer = self.set_timer(3.0, self._enterMaskFreeze)
-        self._rebuild()
+
+
+    def _sampleCellRegion(self, cell: tuple[int, int]) -> Region:
+        return Region(self._sampleBlockCol + cell[1] * 6, self._sampleStartLine + cell[0] * 3, 6, 3)
+
+
+    def _releaseSampleOnClick(self, line: int, col: int) -> None:
+        if self._sampleSelectedCell is not None and self._sampleCellAt(line, col) is None:
+            self._setSampleSelection(None)
+            self._rebuild()
+
+
+    def _releaseHiddenSelection(self) -> None:
+        """Drop the selection once its cell is fully out of the window. It stays dropped if the cell scrolls back."""
+        cell = self._sampleSelectedCell
+        if cell is None:
+            return
+
+        log = self.query_one("#help-log", HelpLog)
+        if not log.scrollable_content_region.at_offset(log.scroll_offset).overlaps(self._sampleCellRegion(cell)):
+            self._setSampleSelection(None)
+            self._rebuild()
 
 
 
@@ -779,10 +854,6 @@ class HelpScreen(Screen):
         cell = self._sampleCellAt(line, col)
         if self._sampleHoverCell != cell:
             self._sampleHoverCell = cell
-            changed = True
-
-        if cell is not None and self._sampleSelectedCell not in (None, cell):
-            self._setSampleSelection(None)
             changed = True
 
         if changed:

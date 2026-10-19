@@ -23,7 +23,8 @@ pip install --upgrade spicebag
 ### TUI app
 
 - Hovering a preview cell, in the encode preview or the help page sample, shrinks it to a rounded block.
-- The last clicked cell keeps that shape over a brand gradient sweeping back and forth once a second: in the encode preview while it stays selected, and in the help page sample until another cell is hovered.
+- The last clicked cell keeps that shape over a brand gradient sweeping back and forth once a second: in the encode preview while it stays selected, and in the help page sample until a click lands outside it, the cell scrolls out of the window or the sample masks.
+- While a help page sample cell is selected, <kbd>ENTER</kbd> rerolls it and the arrow keys move the selection, as in the encode preview, instead of closing the page.
 - The command suggestion in the input bar turns red with the placeholder during an error flash.
 - <kbd>Ctrl</kbd>+<kbd>V</kbd> and <kbd>Shift</kbd>+<kbd>Insert</kbd> paste the system clipboard in terminals that pass them through, filtered for the prompt like any paste, and the clipboard is wiped afterwards. A hue range can be pasted too, under the same rules as typing it.
 - The default save and decode paths in the input bar's placeholder, its <kbd>TAB</kbd> autofill and the answer shown for a blank save path are shortened to `~`, as in CLI mode.
