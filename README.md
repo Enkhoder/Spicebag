@@ -137,7 +137,7 @@ Since each grid holds exactly one cell per word, the total is `(blockSize / 8) ^
 Notes:
 
 - **Positions across salts**: the layout dimension only opens up when the salt changes, contributing up to `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
-- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 1,024 candidates per cell. The reduction is under 0.5%.
+- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 1,024 candidates per cell. The reduction is under 0.5%. A hue range typed for a cell narrows its candidates further, by choice, to its word's colors inside that arc: about a sixth of a salted cell's colors for a 60° arc.
 - **No salt**: the grid is left in natural reading order and no color permutation is applied, but the per-word color count is unchanged.
 
 ---
@@ -246,7 +246,7 @@ Open a new terminal once afterwards. The PATH change is permanent, so `spicebag`
 
 ### Windows executable
 
-Every [GitHub Release](https://github.com/Enkhoder/Spicebag/releases) from 4.0.0 on carries a standalone `spicebag.exe` that needs no Python. Download it and run it from a terminal, as `.\spicebag.exe` or `.\spicebag.exe --encode`. It is not code-signed, so Windows SmartScreen may warn the first time it runs.
+Every [GitHub Release](https://github.com/Enkhoder/Spicebag/releases) from 4.1.0 on carries `Spicebag-X.Y.Z-windows.zip`, which needs no Python. Extract it, keep the `Spicebag` folder somewhere permanent, and run `Spicebag.exe` inside it, from a terminal as `.\Spicebag.exe` or `.\Spicebag.exe --encode`, or pinned to the taskbar or Start menu. The exe needs the `_internal` folder beside it, so move the whole folder, never the exe alone; add the folder to your PATH to run `spicebag` from any terminal. It is not code-signed, so Windows SmartScreen may warn the first time it runs. Releases 4.0.0 and 4.0.1 carried a single `spicebag.exe` instead.
 
 ### From source
 
@@ -298,6 +298,8 @@ Type a command at the prompt:
 Pressing <kbd>ESC</kbd> twice within a second at the menu also quits. An <kbd>ESC</kbd> less than half a second after the previous one never counts toward it, so a burst of <kbd>ESC</kbd> that steps back out of a flow or closes the help screen cannot quit by accident.
 
 The encode flow prompts in order for image count, phrase, salt, salt confirmation, cell size, and save path. A single-image encode then shows a clickable color-space preview before writing the file.
+
+Clicking a cell in the preview selects it, and each further click on the selected cell rerolls its color. To steer a cell toward a hue, click it, then type a hue range in degrees and press <kbd>ENTER</kbd>: two whole numbers from -360 to 360 separated by spaces, such as `20 120`. The range runs upward from the first hue to the second and wraps past 360, so `-20 -50` covers 340 to 310 and `10 -10` covers 10 to 350. The cell rerolls to a color of its word inside the range, with grays, which have no hue, fitting every range. Later clicks on it stay inside it, and the accepted range blinks green in the input bar. With a range already typed, selecting a cell keeps the range for it without recoloring it, and each later click on it rerolls inside the range. After a click, or after <kbd>ENTER</kbd> on a valid range, the arrow keys move the selection between cells, wrapping around the edges. Clicking the input bar drops the selection until you select a cell again. Unsalted cells reach only a narrow arc of hues, so many ranges have no color for them. While the last click was on a cell, <kbd>ENTER</kbd> rerolls the selected cell even on a blank input bar. To write the image, click the input bar, then press <kbd>ENTER</kbd> on it blank.
 
 ### CLI mode
 

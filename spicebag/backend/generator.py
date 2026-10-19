@@ -4,6 +4,7 @@ from spicebag.backend.colors import saltKeys, cellOrder, encodeWord, computeProo
 from spicebag.backend.defaults import SEED_TYPE_STANDARDS, GRID_SIZES
 from dataclasses import dataclass, field
 from PIL import Image
+import colorsys
 import secrets
 import zipfile
 import bisect
@@ -232,6 +233,7 @@ class ColorSpace:
     colorTables: list | None
     cellToWord: dict = field(default_factory=dict)
     colorRGB: dict = field(default_factory=dict)
+    hueRanges: dict = field(default_factory=dict)
 
 
 def precomputeColorSpace(mnemonicRaw, salt):
@@ -266,9 +268,88 @@ def precomputeColorSpace(mnemonicRaw, salt):
     return cs
 
 
+def colorHue(color) -> int | None:
+    """Hue in whole degrees, or None for a gray, which has no hue."""
+    r, g, b = color
+    hue, saturation, _ = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    if saturation == 0:
+        return None
+
+    return round(hue * 360) % 360
+
+
+def inHueRange(color, start: int, span: int) -> bool:
+    """Whether a color's hue lies on the arc running upward from start for span degrees, both ends included. A gray
+    has no hue, so it fits every arc."""
+    hue = colorHue(color)
+    return hue is None or (hue - start) % 360 <= span
+
+
+def _hueCandidates(cs, r, c, start: int, span: int) -> list:
+    """Every color of the cell's word inside the hue arc that differs from its orthogonal neighbors."""
+    i = cs.cellToWord[(r, c)]
+    neighbors = {
+        cs.colorRGB[(nr, nc)]
+        for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1))
+        if (nr, nc) in cs.colorRGB
+    }
+    candidates = []
+    for free in range(cs.freeSize):
+        offset = composeOffset(cs.proof[i], free, cs.maxIdx)
+        color = encodeWord(cs.indices[i], maxIndex=cs.maxIdx, offset=offset, colorTables=cs.colorTables)
+        if color not in neighbors and inHueRange(color, start, span):
+            candidates.append(color)
+
+    return candidates
+
+
+def _pickInHueRange(cs, r, c, start: int, span: int):
+    """A random hue candidate of the cell, differing from its current color when another choice exists. None when
+    the word has no color in the arc."""
+    candidates = _hueCandidates(cs, r, c, start, span)
+    if not candidates:
+        return None
+
+    fresh = [color for color in candidates if color != cs.colorRGB[(r, c)]]
+    return secrets.choice(fresh or candidates)
+
+
+def setHueRange(cs, r, c, start: int, span: int) -> bool:
+    """Keep a hue arc for a cell's later rerolls without recoloring it. Changes nothing and returns False when the
+    cell's word has no color in the arc."""
+    if (r, c) not in cs.cellToWord or not _hueCandidates(cs, r, c, start, span):
+        return False
+
+    cs.hueRanges[(r, c)] = (start, span)
+    return True
+
+
+def applyHueRange(cs, r, c, start: int, span: int) -> bool:
+    """Recolor a cell inside a hue arc and keep the arc for its later rerolls. Changes nothing and returns False
+    when the cell's word has no color in the arc."""
+    if (r, c) not in cs.cellToWord:
+        return False
+
+    color = _pickInHueRange(cs, r, c, start, span)
+    if color is None:
+        return False
+
+    cs.hueRanges[(r, c)] = (start, span)
+    cs.colorRGB[(r, c)] = color
+    return True
+
+
 def rerollCell(cs, r, c):
     if (r, c) not in cs.cellToWord:
         return False
+
+    if (r, c) in cs.hueRanges:
+        color = _pickInHueRange(cs, r, c, *cs.hueRanges[(r, c)])
+        if color is None:
+            return False
+
+        cs.colorRGB[(r, c)] = color
+        return True
 
     i = cs.cellToWord[(r, c)]
 

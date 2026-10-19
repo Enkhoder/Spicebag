@@ -14,7 +14,7 @@ defaults:
 
 jobs:
   exe:
-    name: Build and attach spicebag.exe
+    name: Build and attach the Windows zip
     runs-on: windows-latest
 
     steps:
@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . pyinstaller
-          python -m PyInstaller --noconfirm --onefile --console --name spicebag \
+          python -m PyInstaller --noconfirm --onedir --console --name Spicebag \
               --collect-data spicebag --collect-data mnemonic --collect-data shamir_mnemonic \
               --copy-metadata spicebag --icon docs/assets/spicebag.ico \
               spicebag/__main__.py
@@ -39,11 +39,16 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          dist/spicebag.exe --help
-          test "$(dist/spicebag.exe --version)" = "Spicebag ${TAG#v}"
+          dist/Spicebag/Spicebag.exe --help
+          test "$(dist/Spicebag/Spicebag.exe --version)" = "Spicebag ${TAG#v}"
+
+      - name: Zip the folder
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: cd dist && python -m zipfile -c "Spicebag-${TAG#v}-windows.zip" Spicebag
 
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dist/spicebag.exe --clobber
+        run: gh release upload "$TAG" "dist/Spicebag-${TAG#v}-windows.zip" --clobber

@@ -2,7 +2,8 @@
 
 from spicebag.frontend.theme import (
     COMMANDS, BANNER_META_PREFIX, AppState, OUTPUT_DIR, IMAGES_DIR, SCREENSHOTS_DIR, DEFAULT_CELL_PX, PROGRESS_BAR_LENGTH,
-    C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM, getBannerMeta, metaHoverFrameCount,
+    C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM, getBannerMeta, metaHoverFrameCount, INPUT_FLASH_WIDGETS,
+    parseHueRange, HOVERED_CELL_ROWS,
     blendHexColors, getMascotBanner, gradientColor, bannerGradientHex, ASCII_ART_BANNER, getNetworkText, getVersion,
     bannerHoverFrameCount, formatElapsed, matchCommand, SCREENSHOT_KEY, EXIT_ESC_WINDOW, LIMITED_TERMINAL_NOTICE
 )
@@ -14,6 +15,7 @@ from spicebag.frontend.handlers.encode import EncodeHandlerMixin
 from spicebag.frontend.widgets.secureInput import SecureInput
 from spicebag.frontend.widgets.optionsBar import OptionsBar
 from spicebag.backend.defaults import GRID_SIZES
+from spicebag.backend.paths import tildePath
 from textual.containers import Vertical, Horizontal
 from textual.widgets import Static, Input, Rule
 from textual.app import ComposeResult
@@ -120,7 +122,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         self._shownSaltWarning = False
         self._anyCommandRun = False
-        self._inputBarErrorActive = False
         self._inputErrorTimer: asyncio.TimerHandle | None = None
         self._wordCountWarnTimer: asyncio.TimerHandle | None = None
         self._exitArmTimer: asyncio.TimerHandle | None = None
@@ -158,6 +159,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._sampleBlockCol = 0
         self._sampleCols = 0
         self._sampleRows = 0
+        self._hueCell: tuple[int, int] | None = None
+        self._hueErrorText = ""
+        self._hueErrorTimer: asyncio.TimerHandle | None = None
+        self._hueBlinkTimer = None
+        self._hueBlinkText = ""
+        self._selectSweepTimer = None
+        self._cellNav = False
+        self._lastClickOnCell = False
+        self._lastClickOnBar = False
 
         self._welcomeKey: tuple | None = None
         self._welcomeCache: list = []
@@ -244,37 +254,33 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     ######## ERROR / WARN FLASH ########
 
+    def _setInputFlash(self, cssClass: str, ratio: str, on: bool) -> None:
+        self.query(INPUT_FLASH_WIDGETS).set_class(on, cssClass)
+        self.query_one("#cmd-input", SecureInput).animate(
+            ratio,
+            1.0 if on else 0.0,
+            duration=0.1,
+            easing="in_out_cubic"
+        )
+
+
+    def _clearInputError(self) -> None:
+        """End a red flash now instead of when its timer runs out."""
+        if self._inputErrorTimer is not None:
+            self._inputErrorTimer.cancel()
+            self._inputErrorTimer = None
+            self._setInputFlash("input-error", "_errRatio", False)
+
+
     def _triggerInputError(self) -> None:
-        inputBar = self.query_one("#input-bar")
-        inputPrompt = self.query_one("#input-prompt")
-        cmdInput = self.query_one("#cmd-input", SecureInput)
-        sepBot = self.query_one("#sep-bot")
-        sepStatus = self.query_one("#sep-status")
+        if self._inputErrorTimer is not None:
+            self._inputErrorTimer.cancel()
 
-        if self._inputBarErrorActive:
-            if self._inputErrorTimer is not None:
-                self._inputErrorTimer.cancel()
-
-        else:
-            self._inputBarErrorActive = True
-            inputBar.add_class("input-error")
-            inputPrompt.add_class("input-error")
-            cmdInput.add_class("input-error")
-            sepBot.add_class("input-error")
-            sepStatus.add_class("input-error")
-
-        cmdInput.animate("_errRatio", 1.0, duration=0.1, easing="in_out_cubic")
-
-        def clearError() -> None:
-            self._inputBarErrorActive = False
-            inputBar.remove_class("input-error")
-            inputPrompt.remove_class("input-error")
-            cmdInput.remove_class("input-error")
-            sepBot.remove_class("input-error")
-            sepStatus.remove_class("input-error")
-            cmdInput.animate("_errRatio", 0.0, duration=0.1, easing="in_out_cubic")
-
-        self._inputErrorTimer = asyncio.get_event_loop().call_later(0.5, clearError)
+        self._setInputFlash("input-error", "_errRatio", True)
+        self._inputErrorTimer = asyncio.get_event_loop().call_later(
+            0.5,
+            lambda: self._setInputFlash("input-error", "_errRatio", False)
+        )
 
 
     def _triggerWordCountWarn(self) -> None:
@@ -611,28 +617,179 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     ######## INTERACTIVE SAMPLE ########
 
-    def _handleSampleClick(self, line: int, col: int) -> None:
+    def _sampleCellAt(self, line: int, col: int) -> tuple[int, int] | None:
+        """The clickable sample cell under a document position, if any."""
         node = self._activeSampleNode
         if node is None or self._colorSpace is None:
-            return
+            return None
 
         if not node.sampleClickable or node.sampleMasked or self._sampleStartLine < 0:
-            return
+            return None
 
         rowOff = line - self._sampleStartLine
         colOff = col - self._sampleBlockCol
-        if rowOff < 0 or colOff < 0:
-            return
+        if rowOff < 0 or colOff < 0 or rowOff >= self._sampleRows * 3 or colOff >= self._sampleCols * 6:
+            return None
 
-        if rowOff >= self._sampleRows * 3 or colOff >= self._sampleCols * 6:
+        return rowOff // 3, colOff // 6
+
+
+    def _handleSampleClick(self, line: int, col: int) -> None:
+        """The first click on a cell only selects it, and with a valid hue range in the input bar keeps that range
+        for it and restarts the blink. Clicks on the selected cell reroll it, inside its range if it has one."""
+        cell = self._sampleCellAt(line, col)
+        if cell is None:
             return
 
         from spicebag.backend.generator import rerollCell
 
-        if not rerollCell(self._colorSpace, rowOff // 3, colOff // 6):
+        self._cellNav = True
+        self._lastClickOnCell = True
+        self._lastClickOnBar = False
+        if cell != self._hueCell:
+            self._selectSampleCell(cell)
+            return
+
+        text = self.query_one("#cmd-input", SecureInput).value
+        hueRange = parseHueRange(text, final=True) if text.strip() else None
+        if isinstance(hueRange, tuple) and self._colorSpace.hueRanges.get(cell) != hueRange:
+            self._initHueRange(cell, hueRange, text)
+            return
+
+        if not rerollCell(self._colorSpace, *cell):
             return
 
         self._rebuild(scrollToEnd=False)
+
+
+    def _selectSampleCell(self, cell: tuple[int, int]) -> None:
+        """Select a cell without recoloring it. With a valid hue range in the input bar, the cell keeps that range
+        and the blink restarts."""
+        text = self.query_one("#cmd-input", SecureInput).value
+        hueRange = parseHueRange(text, final=True) if text.strip() else None
+
+        self._stopHueBlink()
+        self._hueCell = cell
+        self._setSampleSelection(cell)
+        if isinstance(hueRange, tuple) and self._colorSpace.hueRanges.get(cell) == hueRange:
+            self._startHueBlink(text)
+
+        elif isinstance(hueRange, tuple):
+            self._initHueRange(cell, hueRange, text)
+
+        self._rebuild(scrollToEnd=False)
+
+
+    def _onInputBarClick(self) -> None:
+        """Clicking the bar hands the arrow keys back to the text and drops the cell selection, so the cells return
+        to normal until one is selected again."""
+        self._cellNav = False
+        self._lastClickOnCell = False
+        self._lastClickOnBar = True
+        if self._hueCell is not None:
+            self._hueCell = None
+            self._stopHueBlink()
+            self._setSampleSelection(None)
+            self._rebuild(scrollToEnd=False)
+
+        else:
+            self._updateUI()
+
+
+    def _moveSampleSelection(self, rowStep: int, colStep: int) -> None:
+        """Arrow keys step the selection one cell, wrapping around each edge of the grid."""
+        if self._hueCell is None or self._colorSpace is None:
+            return
+
+        row, col = self._hueCell
+        self._selectSampleCell(
+            ((row + rowStep) % self._colorSpace.rows, (col + colStep) % self._colorSpace.cols)
+        )
+
+
+    def _setSampleSelection(self, cell: tuple[int, int] | None) -> None:
+        """Show the selected cell over a brand gradient that sweeps back and forth once a second."""
+        node = self._activeSampleNode
+        if node is not None:
+            node.sampleSelected = cell
+
+        self._updateUI()
+        if cell is None:
+            if self._selectSweepTimer is not None:
+                self._selectSweepTimer.stop()
+                self._selectSweepTimer = None
+
+            return
+
+        if self._selectSweepTimer is None:
+            frames = 2 * (len(HOVERED_CELL_ROWS[0]) - 1)
+            self._selectSweepTimer = self.set_interval(1.0 / frames, self._tickSampleSelection)
+
+
+    def _tickSampleSelection(self) -> None:
+        node = self._activeSampleNode
+        if node is None or node.sampleSelected is None:
+            return
+
+        node.sampleSelectPhase = (node.sampleSelectPhase + 1) % (2 * (len(HOVERED_CELL_ROWS[0]) - 1))
+        self._rebuild(scrollToEnd=False)
+
+
+    def _hueInputActive(self) -> bool:
+        """A hue range can be typed at the single-image confirm step once its sample is shown and clickable."""
+        node = self._activeSampleNode
+        return (
+            self._state == AppState.ENCODE_CONFIRM
+            and not self._processing
+            and node is not None
+            and node.sampleClickable
+            and not node.sampleMasked
+        )
+
+
+    def _showHueError(self, message: str) -> None:
+        """Flash the input bar and swap the image stats in the status bar for the message for one second."""
+        self._triggerInputError()
+        self._hueErrorText = message
+        if self._hueErrorTimer is not None:
+            self._hueErrorTimer.cancel()
+
+        self._hueErrorTimer = asyncio.get_event_loop().call_later(1.0, self._clearHueError)
+        self._updateStatusBar()
+
+
+    def _clearHueError(self) -> None:
+        if self._hueErrorTimer is not None:
+            self._hueErrorTimer.cancel()
+            self._hueErrorTimer = None
+
+        if self._hueErrorText:
+            self._hueErrorText = ""
+            self._updateStatusBar()
+
+
+    def _startHueBlink(self, text: str) -> None:
+        self._stopHueBlink()
+        self._clearHueError()
+        self._clearInputError()
+        self._hueBlinkText = text
+        self._setInputFlash("hue-accepted", "_hueRatio", True)
+        self._hueBlinkTimer = self.set_interval(0.5, self._toggleHueBlink)
+
+
+    def _toggleHueBlink(self) -> None:
+        on = not self.query_one("#cmd-input", SecureInput).has_class("hue-accepted")
+        self._setInputFlash("hue-accepted", "_hueRatio", on)
+
+
+    def _stopHueBlink(self) -> None:
+        if self._hueBlinkTimer is None:
+            return
+
+        self._hueBlinkTimer.stop()
+        self._hueBlinkTimer = None
+        self._hueBlinkText = ""
+        self._setInputFlash("hue-accepted", "_hueRatio", False)
 
 
     def _maskActiveSample(self, dropColorSpace: bool = True) -> None:
@@ -642,6 +799,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._colorSpace = None
 
         self._sampleStartLine = -1
+        self._hueCell = None
+        self._cellNav = False
+        self._lastClickOnCell = False
+        self._lastClickOnBar = False
+        self._setSampleSelection(None)
+        self._stopHueBlink()
 
         if node is not None:
             node.sampleMasked = True
@@ -797,7 +960,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         self._setBannerHover(line == bannerLine and startCol <= col <= endCol)
 
-        changed = False
+        changed = self._setSampleHover(self._sampleCellAt(line, col))
 
         for node in self._uniqueHoverNodes():
             want = target[1] if (target is not None and target[0] is node) else -1
@@ -809,9 +972,19 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._rebuild(scrollToEnd=False)
 
 
+    def _setSampleHover(self, cell: tuple[int, int] | None) -> bool:
+        """Mark the hovered sample cell. Returns whether it changed."""
+        node = self._activeSampleNode
+        if node is None or node.sampleHover == cell:
+            return False
+
+        node.sampleHover = cell
+        return True
+
+
     def _clearWordHover(self) -> None:
         self._setBannerHover(False)
-        changed = False
+        changed = self._setSampleHover(None)
 
         for node in self._uniqueHoverNodes():
             if node.hoverIdx != -1:
@@ -1300,6 +1473,9 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             )
 
         if self._state == AppState.ENCODE_CONFIRM:
+            if self._hueErrorText:
+                return f"[{C_FAIL}]{self._hueErrorText}[/]"
+
             cols, rows = GRID_SIZES.get(self._wordCount, (4, 6))
             imgW = cols * self._encodeCellPx
             imgH = rows * self._encodeCellPx
@@ -1358,7 +1534,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             if not inp.value:
-                defaultStr = IMAGES_DIR.as_posix()
+                defaultStr = tildePath(IMAGES_DIR)
                 if self._state == AppState.DECODE_PATH:
                     defaultStr += "//"
 
@@ -1400,6 +1576,9 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if event.input.id != "cmd-input":
             return
 
+        if self._hueBlinkTimer is not None and event.input.value != self._hueBlinkText:
+            self._stopHueBlink()
+
         typed = event.value.lower().strip()
 
         if self._state == AppState.ENCODE_PHRASE:
@@ -1440,10 +1619,19 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             inp.placeholder = ""
 
         elif self._state == AppState.ENCODE_SAVE_PATH:
-            inp.placeholder = IMAGES_DIR.as_posix()
+            inp.placeholder = tildePath(IMAGES_DIR)
 
         elif self._state == AppState.DECODE_PATH:
-            inp.placeholder = f"{IMAGES_DIR.as_posix()}//..."
+            inp.placeholder = f"{tildePath(IMAGES_DIR)}//..."
+
+        elif self._hueInputActive() and self._hueCell is None and self._lastClickOnBar:
+            inp.placeholder = "Enter desired hue range for any cell, or press [bold]ENTER[/] to generate image"
+
+        elif self._hueInputActive() and self._hueCell is None:
+            inp.placeholder = "Enter desired hue range for any cell"
+
+        elif self._hueInputActive():
+            inp.placeholder = "Enter desired hue range for any cell, or click here and press [bold]ENTER[/] to generate image"
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM, AppState.BANNER_CONFIRM):
             inp.placeholder = "Press [bold]ENTER[/] to confirm"
@@ -1462,6 +1650,11 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._state = state
         self._tabIndex = -1
         self._lastIdentifiedCommand = ""
+        self._cellNav = False
+        self._lastClickOnCell = False
+        self._lastClickOnBar = False
+        self._stopHueBlink()
+        self._clearHueError()
         if state == AppState.IDLE:
             self._curRoot = None
             self._curStep = None
@@ -1482,7 +1675,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._exitShortcut()
             return
 
-        self.query_one("#cmd-input", SecureInput).value = ""
+        inp = self.query_one("#cmd-input", SecureInput)
+        if self._hueInputActive() and inp.value.strip():
+            inp.value = ""
+            return
+
+        inp.value = ""
         self._tabIndex = -1
         self._lastIdentifiedCommand = ""
 
@@ -1630,7 +1828,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             event.prevent_default()
             return
 
-        if time.time() < self._readyAt:
+        if time.time() < self._readyAt and not event.value.strip():
             return
 
         rawValue = event.value
@@ -1667,7 +1865,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             self._handleEncodeCell(value)
 
         elif self._state == AppState.ENCODE_CONFIRM:
-            self._handleEncodeConfirm()
+            self._handleEncodeConfirm(rawValue)
 
         elif self._state == AppState.DECODE_PATH:
             await self._handleDecodePath(rawValue)

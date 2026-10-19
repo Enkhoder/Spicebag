@@ -20,7 +20,7 @@ flowchart LR
     classDef security fill:#FFE4E6,stroke:#E11D48,stroke-width:2px,color:#0F172A
     classDef external fill:#F1F5F9,stroke:#64748B,stroke-width:2px,color:#0F172A
 
-    user["User<br/><small>shell or spicebag.exe</small>"]:::external
+    user["User<br/><small>shell or Spicebag.exe</small>"]:::external
     entry["entry.py<br/><small>Typer entry, help</small>"]:::frontend
     tui["TUI app<br/><small>SpicebagApp, MainScreen</small>"]:::frontend
     cli["cli.py<br/><small>CLI mode, plain prompts</small>"]:::frontend
@@ -47,7 +47,7 @@ flowchart LR
 
 ```
 spicebag/
-├── __main__.py             python -m spicebag, and the entry script of spicebag.exe
+├── __main__.py             python -m spicebag, and the entry script of Spicebag.exe
 ├── frontend/
 │   ├── entry.py            Typer entry point
 │   ├── cli.py              CLI mode, the --encode, --decode and --palette prompts
@@ -133,6 +133,7 @@ A terminal resize rebuilds the live block and re-wraps frozen blocks only when t
 - `encodeMnemonic()`: builds a one-pixel-per-cell image, then scales it with `NEAREST`.
 - `bulkEncodeMnemonic()`: decouples color computation from upscaling and writes into a ZIP. Offsets are drawn without replacement, so no two images in a batch share a cell color until the batch outgrows the free colors per cell.
 - `precomputeColorSpace()` / `rerollCell()` / `renderColorSpaceToFile()`: the interactive preview. Single-image encodes from the TUI app go through this path, not through `encodeMnemonic`.
+- `applyHueRange()` / `setHueRange()`: store a hue arc the user typed for a preview cell in `ColorSpace.hueRanges`, recoloring the cell inside it (`applyHueRange`) or leaving its color for the next reroll (`setHueRange`, a cell's first click). Later `rerollCell()` calls on that cell pick only among its word's colors inside the arc. The input grammar lives in `parseHueRange()` in `theme.py`.
 - `cellPalettes()`: every color each cell can take for a phrase and salt, for CLI mode's palette.
 
 `decoder.py`
@@ -277,6 +278,6 @@ On Windows, `run.bat` handles the venv and runs `scripts/dependencyCheck.py`, wh
 python tests/smoke.py
 ```
 
-CI runs it on every push to `main` and every pull request against it, across Ubuntu (3.10, 3.11, 3.13, 3.14), Windows (3.12) and macOS (3.12), then builds the artifacts and rejects any wheel containing files that must never ship. Releases publish to PyPI from a `v*` tag via Trusted Publishing, and publishing a GitHub Release builds a one-file `spicebag.exe` with PyInstaller on Windows and attaches it to that release; see `.github/workflows/`.
+CI runs it on every push to `main` and every pull request against it, across Ubuntu (3.10, 3.11, 3.13, 3.14), Windows (3.12) and macOS (3.12), then builds the artifacts and rejects any wheel containing files that must never ship. Releases publish to PyPI from a `v*` tag via Trusted Publishing, and publishing a GitHub Release builds a one-folder `Spicebag.exe` with PyInstaller on Windows and attaches the folder, zipped as `Spicebag-X.Y.Z-windows.zip`, to that release; see `.github/workflows/`.
 
 There is no linter or formatter configuration. The house style is 128-character lines, `camelCase` functions and variables, `PascalCase` classes, `ALL_CAPS` constants, and `######## CLUSTER TITLE ########` section headers with three blank lines before and one after. Identifiers that come from Textual, Rich or the Win32 API keep their original casing (`on_mount`, `render_line`, `MIB_IF_ROW2`) and must not be renamed to fit the convention.

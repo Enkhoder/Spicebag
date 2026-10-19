@@ -57,6 +57,10 @@ Rule {
     transition: color 100ms in_out_cubic;
 }
 
+Rule.hue-accepted {
+    color: #1A301E;
+}
+
 Rule.input-error {
     color: #35181A;
 }
@@ -89,6 +93,10 @@ Rule.input-error {
     transition: background 100ms in_out_cubic;
 }
 
+#input-bar.hue-accepted {
+    background: #1A301E;
+}
+
 #input-bar.input-error {
     background: #35181A;
 }
@@ -100,6 +108,11 @@ Rule.input-error {
     content-align: left middle;
     background: transparent;
     transition: color 100ms in_out_cubic, background 100ms in_out_cubic;
+}
+
+#input-prompt.hue-accepted {
+    color: #5DE073;
+    background: #1A301E;
 }
 
 #input-prompt.input-error {
@@ -118,6 +131,11 @@ Rule.input-error {
     background-tint: transparent;
 }
 
+#cmd-input.hue-accepted {
+    background: #1A301E;
+    background-tint: transparent;
+}
+
 #cmd-input.input-error {
     background: #35181A;
     background-tint: transparent;
@@ -129,14 +147,14 @@ Rule.input-error {
     transition: background 100ms in_out_cubic, color 100ms in_out_cubic;
 }
 
-#cmd-input.input-error > .input--cursor {
-    background: #FF4F5E;
-    color: #35181A;
-}
-
 #cmd-input:focus {
     border: none;
     background: transparent;
+    background-tint: transparent;
+}
+
+#cmd-input.hue-accepted:focus {
+    background: #1A301E;
     background-tint: transparent;
 }
 

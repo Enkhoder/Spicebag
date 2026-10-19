@@ -8,8 +8,8 @@ from spicebag.backend.generator import identifySeedType, bulkEncodeMnemonic, enc
 from spicebag.backend.decoder import decodeImage, imageError, validatePNGStructure, PNG_SIGNATURE, BAD_PNG_TEXT
 from spicebag.frontend.utils.clipboard import pasteOnce, clearClipboard, clipboardBlocker, readClipboard
 from spicebag.frontend.utils.terminalColors import STD_OUTPUT_HANDLE, ENABLE_VIRTUAL_TERMINAL_PROCESSING
+from spicebag.backend.paths import parseSavePath, locateImage, tildePath
 from spicebag.backend.defaults import WORD_COUNTS, GRID_SIZES
-from spicebag.backend.paths import parseSavePath, locateImage
 from spicebag.backend.colors import normalizeSalt
 from rich.console import Console
 from rich.control import Control
@@ -317,17 +317,6 @@ def _checkSavePath(raw: str) -> tuple[tuple[Path, str] | None, str]:
     return (targetDir, stem), ""
 
 
-def _tildePath(path: Path) -> str:
-    """A path under the home folder shortened to ~, written the way save paths are typed."""
-    path = Path(os.path.abspath(path))
-
-    try:
-        return (Path("~") / path.relative_to(Path.home())).as_posix()
-
-    except ValueError:
-        return str(path)
-
-
 def _inspectImage(path: str) -> str:
     """The interface's image checks, worded without the final period since the reason runs into the prompt. A
     file that is not a PNG, a forbidden chunk and a bad color space each get their own short reason, where the
@@ -468,7 +457,7 @@ def _encodeFlow() -> int:
     targetDir, stem = _prompt(
         "Save path: ",
         _checkSavePath,
-        fill=lambda value: _tildePath(value[0] / (defaultStem + extension))
+        fill=lambda value: tildePath(value[0] / (defaultStem + extension))
     )
 
     _proceed()
