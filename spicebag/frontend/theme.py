@@ -20,7 +20,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "4.0.1"
+        return "4.1.0"
 
 
 
@@ -51,11 +51,29 @@ CLIPBOARD_KEYS = frozenset({
     "cmd+c", "cmd+x", "cmd+v", "cmd+a",
 })
 
+HUE_EDIT_KEYS = frozenset({"backspace", "delete", "left", "right", "home", "end"})
+
+ARROW_STEPS = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
+
+INPUT_FLASH_WIDGETS = "#sep-bot, #input-bar, #input-prompt, #cmd-input, #sep-status"
+
+HOVERED_CELL_ROWS = (" ▄▄▄▄ ", " ████ ", " ▀▀▀▀ ")
+
 MODIFIER_KEYS = frozenset({
     "left_shift", "left_control", "left_alt", "left_super", "left_hyper", "left_meta",
     "right_shift", "right_control", "right_alt", "right_super", "right_hyper", "right_meta",
-    "iso_level3_shift", "iso_level5_shift",
+    "iso_level3_shift", "iso_level5_shift", "ctrl+@",
 })
+
+SYSTEM_KEYS = MODIFIER_KEYS | frozenset({
+    "tab", "shift+tab", "alt+tab", "alt+shift+tab", "alt+escape", "alt+space", "alt+f4", "ctrl+escape", "f11",
+    "caps_lock", "scroll_lock", "num_lock", "print_screen", "pause", "menu",
+    "media_play", "media_pause", "media_play_pause", "media_reverse", "media_stop", "media_fast_forward",
+    "media_rewind", "media_track_next", "media_track_previous", "media_record",
+    "lower_volume", "raise_volume", "mute_volume",
+})
+
+PASTE_KEYS = frozenset({"ctrl+v", "shift+insert", "cmd+v"})
 
 SCREENSHOT_KEY = "f12"
 
@@ -279,6 +297,75 @@ def matchCommand(typed: str) -> str | None:
     return "encode" if "encode" in matches else matches[0]
 
 
+def parseHueRange(text: str, final: bool) -> tuple[int, int] | str | None:
+    """Read two whole hues separated by spaces, each optionally signed by one hyphen that may stand apart from its
+    digits, into the arc (start, span) running upward from the first hue to the second. Returns an error message
+    instead when the text is invalid. While typing (final False) a dangling hyphen or a missing hue is not an error
+    yet, and valid text returns None. Any character other than a digit or a hyphen separates like a space."""
+    hues: list[int] = []
+    signs = 0
+    misplaced = False
+    tooManyHyphens = False
+    afterDigit = False
+    i = 0
+
+    while i < len(text):
+        char = text[i]
+        if char not in "0123456789-":
+            afterDigit = False
+            i += 1
+            continue
+
+        if char == "-":
+            if afterDigit:
+                misplaced = True
+
+            else:
+                signs += 1
+                tooManyHyphens = tooManyHyphens or signs > 1
+
+            i += 1
+            continue
+
+        end = i
+        while end < len(text) and text[end] in "0123456789":
+            end += 1
+
+        value = int(text[i:end])
+        hues.append(-value if signs else value)
+        signs = 0
+        afterDigit = True
+        i = end
+
+    if final and signs:
+        misplaced = True
+
+    if tooManyHyphens:
+        return "Too many hyphens."
+
+    if misplaced:
+        return "Hyphen is misplaced."
+
+    if len(hues) > 2:
+        return "Too many hues."
+
+    if any(abs(hue) > 360 for hue in hues):
+        return "Hue out of range."
+
+    if not final:
+        return None
+
+    if len(hues) < 2:
+        return "Two hues are needed."
+
+    first, second = hues
+    span = (second - first) % 360
+    if span == 0 and first != second:
+        span = 360
+
+    return first % 360, span
+
+
 def blendHexColors(c1: str, c2: str, ratio: float) -> str:
     r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
     r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
@@ -322,6 +409,15 @@ def bannerGradientHex(t: float) -> str:
 
     r, g, b = colorsys.hls_to_rgb(h, light, s)
     return f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+
+
+def sweepGradientHex(i: int, phase: int, length: int) -> str:
+    """Brand gradient color at position i of a back-and-forth sweep over length cells, the motion of the hovered
+    banner titles. A full cycle takes 2 * (length - 1) phases."""
+    half = length - 1
+    period = 2 * half
+    p = (i - phase) % period
+    return bannerGradientHex((p if p <= half else period - p) / half)
 
 
 def invertedGradientHex(t: float) -> str:

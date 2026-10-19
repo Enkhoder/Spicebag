@@ -4,7 +4,7 @@ from spicebag.frontend.theme import (
     invertedGradientHex,
     bannerGradientHex,
     C_WHITE, C_DIM, C_INP, C_IMG, C_WC, C_SUCC, C_FAIL,
-    SCREENSHOT_KEY, MODIFIER_KEYS,
+    SCREENSHOT_KEY, MODIFIER_KEYS, HOVERED_CELL_ROWS, ARROW_STEPS,
 )
 from spicebag.backend.generator import ColorSpace, precomputeColorSpace, rerollCell
 from spicebag.frontend.widgets.stripLog import StripLog, renderStrips
@@ -12,6 +12,7 @@ from spicebag.frontend.tree import RootNode, TreeNode, renderBlocks
 from spicebag.backend.defaults import GRID_SIZES
 from textual.app import ComposeResult
 from typing import Optional, Sequence
+from textual.geometry import Region
 from textual.screen import Screen
 from textual.strip import Strip
 from rich.style import Style
@@ -153,6 +154,11 @@ ENCODE_ROWS = [
                       "no character limit, no rules.", C_DIM)]),
     ("Cell size",   [("1-2000", C_INP)]),
     ("Save path",   SEE_FILE_PATHS),
+    ("Hue range",   [("20 120", C_INP),
+                     (" after clicking a cell of a single-image preview keeps its color between hues 20 and 120. "
+                      "A hyphen makes a hue negative, so ", C_DIM),
+                     ("-20 -50", C_INP),
+                     (" runs from 340 up to 310.", C_DIM)]),
 ]
 
 ENCODE_PATH_ROWS = [
@@ -246,7 +252,13 @@ def _commandsBlock() -> RootNode:
     return root
 
 
-def _encodeBlock(colorSpace: Optional[ColorSpace], masked: bool) -> RootNode:
+def _encodeBlock(
+    colorSpace: Optional[ColorSpace],
+    masked: bool,
+    hoverCell: Optional[tuple[int, int]],
+    selectedCell: Optional[tuple[int, int]],
+    selectPhase: int
+) -> RootNode:
     root = RootNode(label=_mk([("ENCODE", f"bold {C_IMG}")]), bullet=C_WHITE)
     root.children = [
         _note([("Writes a PNG file for 1 image by default, or a ZIP file containing bulk PNGs for "
@@ -264,6 +276,9 @@ def _encodeBlock(colorSpace: Optional[ColorSpace], masked: bool) -> RootNode:
             sampleSpace=colorSpace,
             sampleMasked=masked,
             sampleClickable=True,
+            sampleHover=hoverCell,
+            sampleSelected=selectedCell,
+            sampleSelectPhase=selectPhase,
         )
         root.children.append(_branch(
             [(f"{SAMPLE_INTRO} Click on a cell to reroll its color within its word's chunk.", C_DIM)],
@@ -422,6 +437,10 @@ class HelpLog(StripLog):
         line = event.y + self.scroll_offset.y
         col = event.x + self.scroll_offset.x
 
+        releaser = getattr(self.screen, "_releaseSampleOnClick", None)
+        if releaser is not None:
+            releaser(line, col)
+
         hitWord = getattr(self.screen, "_hitSeedWord", None)
         wordIdx = hitWord(line, col) if hitWord is not None else None
         if wordIdx is not None:
@@ -461,13 +480,30 @@ class HelpLog(StripLog):
             handler()
 
 
+    def watch_scroll_x(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_x(old_value, new_value)
+        self._releaseHiddenSelection()
+
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_y(old_value, new_value)
+        self._releaseHiddenSelection()
+
+
+    def _releaseHiddenSelection(self) -> None:
+        handler = getattr(self.screen, "_releaseHiddenSelection", None)
+        if handler is not None:
+            handler()
+
+
 
 ######## HELP SCREEN ########
 
 class HelpScreen(Screen):
     """Self-contained, single-column guide shown over the menu. Any key returns,
     leaving the menu underneath exactly as it was, except F12 which takes an
-    unmasked screenshot without closing the guide. The encode sample and decode
+    unmasked screenshot without closing the guide, and ENTER and the arrow keys
+    while a sample cell is selected. The encode sample and decode
     grid are live and behave like their real counterparts on the main menu. The
     log fills the screen with no padding or margin, so every line runs edge to edge."""
 
@@ -510,6 +546,10 @@ class HelpScreen(Screen):
         self._sampleBlockCol = 0
         self._sampleCols = 0
         self._sampleRows = 0
+        self._sampleHoverCell: Optional[tuple[int, int]] = None
+        self._sampleSelectedCell: Optional[tuple[int, int]] = None
+        self._sampleSelectPhase = 0
+        self._selectTimer = None
         self._seedRevealAll = True
         self._seedHoverIdx = -1
         self._hoverRegions: list = []
@@ -572,6 +612,10 @@ class HelpScreen(Screen):
         if event.key in MODIFIER_KEYS or time.time() < self._readyAt:
             return
 
+        if self._sampleSelectedCell is not None and (event.key == "enter" or event.key in ARROW_STEPS):
+            self._handleSampleKey(event.key)
+            return
+
         if self._imgTimer is not None:
             self._imgTimer.stop()
             self._imgTimer = None
@@ -580,6 +624,7 @@ class HelpScreen(Screen):
         self._stopTimer("_maskTimer")
         self._stopTimer("_nameTimer")
         self._stopTimer("_versionTimer")
+        self._stopTimer("_selectTimer")
 
         self.app.pop_screen()
 
@@ -587,6 +632,7 @@ class HelpScreen(Screen):
     def on_resize(self) -> None:
         if self.is_mounted:
             self._rebuild()
+            self.call_after_refresh(self._releaseHiddenSelection)
 
 
 
@@ -633,6 +679,7 @@ class HelpScreen(Screen):
 
         self._imgMasked = True
         self._imgPausedUntil = 0.0
+        self._setSampleSelection(None)
         self._maskTimer = self.set_timer(2.0, self._exitMaskFreeze)
         self._rebuild()
 
@@ -655,29 +702,104 @@ class HelpScreen(Screen):
 
     ######## INTERACTIVE SAMPLE ########
 
-    def _handleSampleClick(self, line: int, col: int) -> None:
-        """A click re-rolls only the clicked tile (same next-color logic as the
-        real confirm-step preview) and pauses auto-reshuffle for 3 seconds."""
-        cs = self._imgColorSpace
-        if cs is None or self._imgMasked or self._sampleStartLine < 0:
+    def _setSampleSelection(self, cell: Optional[tuple[int, int]]) -> None:
+        """Show the clicked cell over the brand gradient sweep, until a click lands outside the sample, the cell scrolls
+        fully out of the window or the sample masks. Clicking the selected cell again keeps the sweep running where it is."""
+        if cell == self._sampleSelectedCell:
             return
+
+        self._sampleSelectedCell = cell
+        self._sampleSelectPhase = 0
+        if cell is None:
+            self._stopTimer("_selectTimer")
+
+        elif self._selectTimer is None:
+            self._selectTimer = self.set_interval(1.0 / (2 * (len(HOVERED_CELL_ROWS[0]) - 1)), self._tickSampleSelection)
+
+
+    def _tickSampleSelection(self) -> None:
+        if self._sampleSelectedCell is None:
+            return
+
+        self._sampleSelectPhase = (self._sampleSelectPhase + 1) % (2 * (len(HOVERED_CELL_ROWS[0]) - 1))
+        self._rebuild()
+
+
+    def _sampleCellAt(self, line: int, col: int) -> Optional[tuple[int, int]]:
+        """The sample cell under a document position, if the sample is shown unmasked."""
+        if self._imgColorSpace is None or self._imgMasked or self._sampleStartLine < 0:
+            return None
 
         rowOff = line - self._sampleStartLine
         colOff = col - self._sampleBlockCol
-        if rowOff < 0 or colOff < 0:
+        if rowOff < 0 or colOff < 0 or rowOff >= self._sampleRows * 3 or colOff >= self._sampleCols * 6:
+            return None
+
+        return rowOff // 3, colOff // 6
+
+
+    def _handleSampleClick(self, line: int, col: int) -> None:
+        """A click re-rolls only the clicked tile (same next-color logic as the
+        real confirm-step preview) and pauses auto-reshuffle for 3 seconds."""
+        cell = self._sampleCellAt(line, col)
+        if cell is None or not rerollCell(self._imgColorSpace, *cell):
             return
 
-        if rowOff >= self._sampleRows * 3 or colOff >= self._sampleCols * 6:
-            return
-
-        if not rerollCell(cs, rowOff // 3, colOff // 6):
-            return
+        self._setSampleSelection(cell)
 
         self._imgRevision += 1
+        self._holdSample()
+        self._rebuild()
+
+
+    def _handleSampleKey(self, key: str) -> None:
+        """ENTER rerolls the selected cell and the arrow keys step the selection, wrapping around each edge of the
+        grid and scrolling the new cell into view, as in the real confirm-step preview."""
+        row, col = self._sampleSelectedCell
+        if key == "enter":
+            if rerollCell(self._imgColorSpace, row, col):
+                self._imgRevision += 1
+
+        else:
+            rowStep, colStep = ARROW_STEPS[key]
+            self._setSampleSelection(((row + rowStep) % self._sampleRows, (col + colStep) % self._sampleCols))
+
+        self._holdSample()
+        self._rebuild()
+        self.query_one("#help-log", HelpLog).scroll_to_region(
+            self._sampleCellRegion(self._sampleSelectedCell),
+            animate=False,
+            immediate=True
+        )
+
+
+    def _holdSample(self) -> None:
+        """Pause the auto-reshuffle for 3 seconds, then mask the sample unless another click or key comes first."""
         self._imgPausedUntil = time.time() + 3.0
         self._stopTimer("_graceTimer")
         self._graceTimer = self.set_timer(3.0, self._enterMaskFreeze)
-        self._rebuild()
+
+
+    def _sampleCellRegion(self, cell: tuple[int, int]) -> Region:
+        return Region(self._sampleBlockCol + cell[1] * 6, self._sampleStartLine + cell[0] * 3, 6, 3)
+
+
+    def _releaseSampleOnClick(self, line: int, col: int) -> None:
+        if self._sampleSelectedCell is not None and self._sampleCellAt(line, col) is None:
+            self._setSampleSelection(None)
+            self._rebuild()
+
+
+    def _releaseHiddenSelection(self) -> None:
+        """Drop the selection once its cell is fully out of the window. It stays dropped if the cell scrolls back."""
+        cell = self._sampleSelectedCell
+        if cell is None:
+            return
+
+        log = self.query_one("#help-log", HelpLog)
+        if not log.scrollable_content_region.at_offset(log.scroll_offset).overlaps(self._sampleCellRegion(cell)):
+            self._setSampleSelection(None)
+            self._rebuild()
 
 
 
@@ -729,6 +851,11 @@ class HelpScreen(Screen):
             self._hoveredLink = link
             changed = True
 
+        cell = self._sampleCellAt(line, col)
+        if self._sampleHoverCell != cell:
+            self._sampleHoverCell = cell
+            changed = True
+
         if changed:
             self._rebuild()
 
@@ -744,6 +871,10 @@ class HelpScreen(Screen):
 
         if self._seedHoverIdx != -1:
             self._seedHoverIdx = -1
+            changed = True
+
+        if self._sampleHoverCell is not None:
+            self._sampleHoverCell = None
             changed = True
 
         if changed:
@@ -984,8 +1115,15 @@ class HelpScreen(Screen):
         offset = len(strips)
         sampleStrips, sampleHit, _ = self._blockSection(
             "encode",
-            (width, self._imgMasked, self._imgRevision),
-            lambda: _encodeBlock(self._imgColorSpace, self._imgMasked),
+            (width, self._imgMasked, self._imgRevision, self._sampleHoverCell, self._sampleSelectedCell,
+             self._sampleSelectPhase),
+            lambda: _encodeBlock(
+                self._imgColorSpace,
+                self._imgMasked,
+                self._sampleHoverCell,
+                self._sampleSelectedCell,
+                self._sampleSelectPhase
+            ),
             width,
         )
         strips.extend(sampleStrips)

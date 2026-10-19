@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spicebag"
-version = "4.0.1"
+version = "4.1.0"
 description = "Visual Mnemonic Encoder / Decoder"
 readme = "README.md"
 license = "MIT"

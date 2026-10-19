@@ -77,6 +77,13 @@ class StripLog(ScrollView):
 
 
     def scrollToEnd(self) -> None:
+        """Scroll now, and again after the next refresh: the first time the document outgrows the view, Textual
+        has not shown the vertical scrollbar yet and ignores a scroll until its layout catches up."""
+        self._scrollToEndNow()
+        self.call_after_refresh(self._scrollToEndNow)
+
+
+    def _scrollToEndNow(self) -> None:
         self.scroll_to(y=max(0, len(self._strips) - self.scrollable_content_region.height), animate=False)
 
 

@@ -1,11 +1,11 @@
 ######## LIBRARIES ########
 
 from spicebag.frontend.theme import (
-    CLIPBOARD_KEYS, SCREENSHOT_KEY, AppState,
-    C_BG, C_DIM, C_FAIL, C_WHITE,
-    blendHexColors, matchCommand
+    ARROW_STEPS, CLIPBOARD_KEYS, HUE_EDIT_KEYS, PASTE_KEYS, SCREENSHOT_KEY, SYSTEM_KEYS, AppState,
+    C_BG, C_DIM, C_FAIL, C_SUCC, C_WHITE,
+    blendHexColors, matchCommand, parseHueRange
 )
-from spicebag.frontend.utils.clipboard import clearClipboard
+from spicebag.frontend.utils.clipboard import clearClipboard, readClipboard
 from spicebag.backend.defaults import MAX_SEED_WORDS
 from textual.reactive import reactive
 from textual.widgets import Input
@@ -15,6 +15,7 @@ from rich.style import Style
 from rich.text import Text
 from textual import events
 import unicodedata
+import re
 
 
 
@@ -25,6 +26,7 @@ class SecureInput(Input):
     command suggestion and placeholder."""
 
     _errRatio = reactive(0.0, repaint=True)
+    _hueRatio = reactive(0.0, repaint=True)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -53,6 +55,23 @@ class SecureInput(Input):
         self._ghost = best[len(stripped):] if best else ""
 
 
+    def _cursorColors(self) -> tuple[str, str]:
+        """Cursor background and foreground, blended toward the green hue blink and then the red error flash, so
+        an error shown during a blink still reads red."""
+        background = blendHexColors(blendHexColors(C_WHITE, C_SUCC, self._hueRatio), C_FAIL, self._errRatio)
+        foreground = blendHexColors(blendHexColors(C_BG, "#1A301E", self._hueRatio), "#35181A", self._errRatio)
+        return background, foreground
+
+
+    def get_component_rich_style(self, *names: str, partial: bool = False, default: Style | None = None) -> Style:
+        style = super().get_component_rich_style(*names, partial=partial, default=default)
+        if names != ("input--cursor",) or (self._hueRatio == 0 and self._errRatio == 0):
+            return style
+
+        background, foreground = self._cursorColors()
+        return style + Style(bgcolor=background, color=foreground)
+
+
     def on_paste(self, event: events.Paste) -> None:
         event.stop()
         event.prevent_default()
@@ -60,6 +79,10 @@ class SecureInput(Input):
 
         state = getattr(self.screen, "_state", None) if hasattr(self.screen, "_state") else None
         if state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM):
+            hueInputActive = getattr(self.screen, "_hueInputActive", None)
+            if state == AppState.ENCODE_CONFIRM and hueInputActive is not None and hueInputActive():
+                self._pasteHueRange(event.text)
+
             return
 
         pasteTextRaw = event.text
@@ -110,6 +133,30 @@ class SecureInput(Input):
                     self.insert_text_at_cursor(pasteTextRaw)
 
 
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        handler = getattr(self.screen, "_onInputBarClick", None)
+        if handler is not None:
+            handler()
+
+
+    def _pasteHueRange(self, raw: str) -> None:
+        """Paste into a hue range under the typing rules: only digits, hyphens and spaces go in, and text that
+        would make the range invalid is refused whole with its reason."""
+        text = "".join(" " if char.isspace() else char for char in raw)
+        clean = "".join(char for char in text if char in "0123456789- ")
+        if clean != text:
+            self.screen._triggerInputError()
+
+        pos = self.cursor_position
+        error = parseHueRange(self.value[:pos] + clean + self.value[pos:], final=False)
+        if error is not None:
+            self.screen._showHueError(error)
+            return
+
+        if clean:
+            self.insert_text_at_cursor(clean)
+
+
     def on_key(self, event: events.Key) -> None:
         if getattr(self.screen, "_processing", False):
             if event.is_printable and event.character:
@@ -150,6 +197,15 @@ class SecureInput(Input):
 
             return
 
+        if event.key in PASTE_KEYS:
+            event.stop()
+            event.prevent_default()
+            text = readClipboard()
+            if text:
+                self.on_paste(events.Paste(text))
+
+            return
+
         if event.key in CLIPBOARD_KEYS:
             event.stop()
             event.prevent_default()
@@ -165,8 +221,46 @@ class SecureInput(Input):
 
         state = getattr(self.screen, "_state", None) if hasattr(self.screen, "_state") else None
 
+        hueInputActive = getattr(self.screen, "_hueInputActive", None)
+        if state == AppState.ENCODE_CONFIRM and hueInputActive is not None and hueInputActive():
+            if event.key in ARROW_STEPS and getattr(self.screen, "_cellNav", False):
+                self.screen._moveSampleSelection(*ARROW_STEPS[event.key])
+                event.stop()
+                event.prevent_default()
+                return
+
+            if event.key in ("up", "down"):
+                event.stop()
+                event.prevent_default()
+                return
+
+            if event.key in HUE_EDIT_KEYS:
+                return
+
+            if event.is_printable and event.character:
+                if event.character not in "0123456789- ":
+                    self.screen._triggerInputError()
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+                if event.character == " " and len(re.findall(r"\d+", self.value)) >= 2:
+                    self.screen._showHueError("Too many hues.")
+                    event.stop()
+                    event.prevent_default()
+                    return
+
+                pos = self.cursor_position
+                error = parseHueRange(self.value[:pos] + event.character + self.value[pos:], final=False)
+                if error is not None:
+                    self.screen._showHueError(error)
+                    event.stop()
+                    event.prevent_default()
+
+                return
+
         if state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM, AppState.BANNER_CONFIRM):
-            if event.key not in ("enter", "escape", SCREENSHOT_KEY):
+            if event.key not in ("enter", "escape", SCREENSHOT_KEY) and event.key not in SYSTEM_KEYS:
                 if hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
 
@@ -274,7 +368,7 @@ class SecureInput(Input):
             insertAt = len(value.rstrip())
             ghostEnd = insertAt + len(ghost)
 
-            ghostStyle = Style(color=C_DIM)
+            ghostStyle = Style(color=blendHexColors(C_DIM, "#B9646B", self._errRatio))
             boldStyle = Style(bold=True)
 
             chars = list(value)
@@ -318,8 +412,7 @@ class SecureInput(Input):
         placeholder.stylize(placeholderStyle)
 
         if self.has_focus:
-            cursorBg = blendHexColors(C_WHITE, C_FAIL, t)
-            cursorFg = blendHexColors(C_BG, "#35181A", t)
+            cursorBg, cursorFg = self._cursorColors()
             cursorStyle = Style(bgcolor=cursorBg, color=cursorFg)
 
             if self._cursor_visible:

@@ -2,11 +2,11 @@
 
 from spicebag.frontend.theme import (
     C_SUCC, C_DIM, C_INP, C_FAIL, C_IMG, AppState,
-    IMAGES_DIR, MAX_IMAGE_COUNT, MAX_CELL_PX, DEFAULT_CELL_PX
+    IMAGES_DIR, MAX_IMAGE_COUNT, MAX_CELL_PX, DEFAULT_CELL_PX, parseHueRange
 )
 from spicebag.backend.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
+from spicebag.backend.paths import parseSavePath, tildePath
 from spicebag.backend.colors import normalizeSalt
-from spicebag.backend.paths import parseSavePath
 from rich.style import Style
 from rich.text import Text
 from textual import work
@@ -46,6 +46,9 @@ class EncodeHandlerMixin:
         _confirmBaseMarkup: str
         _spinnerFrame: int
         _spinnerTimer: typing.Any
+        _hueCell: tuple[int, int] | None
+        _cellNav: bool
+        _lastClickOnCell: bool
         _tabIndex: int
         _lastIdentifiedCommand: str
         _state: AppState
@@ -67,6 +70,13 @@ class EncodeHandlerMixin:
         def _startLoader(self, baseMsgPlain: str) -> None: ...
         def _stopLoader(self, warn: bool = ...) -> None: ...
         def _stopBranchFlicker(self) -> None: ...
+        def _updateUI(self) -> None: ...
+        def _hueInputActive(self) -> bool: ...
+        def _showHueError(self, message: str) -> None: ...
+        def _clearHueError(self) -> None: ...
+        def _startHueBlink(self, text: str) -> None: ...
+        def _stopHueBlink(self) -> None: ...
+        def _setSampleSelection(self, cell: tuple[int, int] | None) -> None: ...
         def query_one(self, selector: str, expect_type: type = typing.Any) -> typing.Any: ...
 
     def _handleEncodeCount(self, value: str) -> None:
@@ -170,7 +180,7 @@ class EncodeHandlerMixin:
 
 
     def _handleSavePath(self, rawValue: str) -> None:
-        self._addAnswer(rawValue.strip() or IMAGES_DIR.as_posix(), f"bold {C_INP}")
+        self._addAnswer(rawValue.strip() or tildePath(IMAGES_DIR), f"bold {C_INP}")
         result = parseSavePath(rawValue.strip(), IMAGES_DIR)
 
         if isinstance(result, str):
@@ -264,6 +274,7 @@ class EncodeHandlerMixin:
         confirmStep.children.insert(0, node)
         self._activeSampleNode = node
         self._rebuild()
+        self._updateUI()
 
 
     def _startConfirmSpinner(self) -> None:
@@ -304,16 +315,77 @@ class EncodeHandlerMixin:
             node.text = Text.from_markup(self._confirmBaseMarkup)
 
 
-    def _handleEncodeConfirm(self) -> None:
+    def _handleEncodeConfirm(self, rawValue: str = "") -> None:
+        """While the last click was on a cell, ENTER recolors the selected cell, even on a blank input bar; the image
+        is written by ENTER on a blank bar once the bar itself was clicked."""
+        if self._hueInputActive() and self._lastClickOnCell and self._hueCell is not None and not rawValue.strip():
+            from spicebag.backend.generator import rerollCell
+
+            if rerollCell(self._colorSpace, *self._hueCell):
+                self._rebuild(scrollToEnd=False)
+
+            return
+
+        if rawValue.strip() and self._hueInputActive():
+            self._handleHueRange(rawValue)
+            return
+
         if self._encodeCount == 1 and self._colorSpace is None and self._precomputePending:
             self._triggerInputError()
             return
 
+        self._stopHueBlink()
         if self._activeSampleNode is not None:
             self._activeSampleNode.sampleClickable = False
+            self._activeSampleNode.sampleHover = None
+            self._setSampleSelection(None)
+            self._cellNav = False
+            self._lastClickOnCell = False
 
         self._addDashbar(C_INP)
         self._runEncode()
+
+
+    def _handleHueRange(self, rawValue: str) -> None:
+        """Recolor the last clicked cell inside the typed hue range. The text stays in the bar: blinking once
+        accepted, or left to fix after an error."""
+        from spicebag.frontend.widgets.secureInput import SecureInput
+        from spicebag.backend.generator import applyHueRange
+
+        inp = self.query_one("#cmd-input", SecureInput)
+        inp.value = rawValue
+        inp.cursor_position = len(rawValue)
+
+        parsed = parseHueRange(rawValue, final=True)
+        if isinstance(parsed, str):
+            self._showHueError(parsed)
+            return
+
+        if self._hueCell is None:
+            self._showHueError("Click a cell first.")
+            return
+
+        start, span = typing.cast(tuple[int, int], parsed)
+        if not applyHueRange(self._colorSpace, *self._hueCell, start, span):
+            self._showHueError("No color in this hue range.")
+            return
+
+        self._clearHueError()
+        self._cellNav = True
+        self._rebuild(scrollToEnd=False)
+        self._startHueBlink(rawValue)
+
+
+    def _initHueRange(self, cell: tuple[int, int], hueRange: tuple[int, int], text: str) -> None:
+        """A click with a valid range in the bar keeps the range for that cell without recoloring it yet."""
+        from spicebag.backend.generator import setHueRange
+
+        if not setHueRange(self._colorSpace, *cell, *hueRange):
+            self._showHueError("No color in this hue range.")
+            return
+
+        self._clearHueError()
+        self._startHueBlink(text)
 
 
     @work

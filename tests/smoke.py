@@ -9,8 +9,12 @@ fail, and checks that a wrong salt is rejected rather than decoded. Exits non-ze
 
 ######## LIBRARIES ########
 
-from spicebag.backend.generator import encodeMnemonic, bulkEncodeMnemonic, identifySeedType
+from spicebag.backend.generator import (
+    encodeMnemonic, bulkEncodeMnemonic, identifySeedType, precomputeColorSpace, applyHueRange, rerollCell,
+    inHueRange, renderColorSpaceToFile
+)
 from spicebag.backend.decoder import decodeImage, WrongSaltError
+from spicebag.frontend.theme import parseHueRange
 import tempfile
 import hashlib
 import pathlib
@@ -140,6 +144,62 @@ def proofOfPhrase(phrase, workDir):
     check(f"{wordCount}w unsalted image given a salt is rejected", outcome(plain, "k") == "rejected")
 
 
+def hueParsing():
+    """The hue range grammar: space-separated hues, hyphen only as a minus sign, upward arcs, one error each."""
+    cases = {
+        "20 120": (20, 100),
+        "-20 -50": (340, 330),
+        "10 -10": (10, 340),
+        "- 20   -  50": (340, 330),
+        "  7   -3  ": (7, 350),
+        "20 20": (20, 0),
+        "0 360": (0, 360),
+        "10-50": "Hyphen is misplaced.",
+        "20 -": "Hyphen is misplaced.",
+        "20- 50-": "Hyphen is misplaced.",
+        "--20 50": "Too many hyphens.",
+        "400 10": "Hue out of range.",
+        "10 20 30": "Too many hues.",
+        "20": "Two hues are needed.",
+    }
+
+    for text, expected in cases.items():
+        got = parseHueRange(text, final=True)
+        check(f"hue range {text!r}", got == expected, got)
+
+    check("hue range typing allows a dangling hyphen", parseHueRange("20 -", final=False) is None)
+
+
+def hueRanges(phrase, workDir):
+    """A hue range recolors a cell inside the arc, sticks for later rerolls, refuses an arc the word cannot reach,
+    and the image still decodes."""
+    cs = precomputeColorSpace(phrase, "k")
+    neighbors = [cs.colorRGB[cell] for cell in ((1, 0), (0, 1))]
+    applied = applyHueRange(cs, 0, 0, 0, 60)
+    check("hue range applies to a salted cell", applied and inHueRange(cs.colorRGB[(0, 0)], 0, 60), cs.colorRGB[(0, 0)])
+    check("hue range avoids neighbor colors", cs.colorRGB[(0, 0)] not in neighbors)
+
+    rerolled = []
+    for _ in range(20):
+        rerollCell(cs, 0, 0)
+        rerolled.append(inHueRange(cs.colorRGB[(0, 0)], 0, 60))
+
+    check("rerolls stay inside the stored hue range", all(rerolled))
+    check("grays fit every hue range", inHueRange((128, 128, 128), 300, 30) and inHueRange((0, 0, 0), 20, 0))
+
+    image = workDir / "hue.png"
+    renderColorSpaceToFile(cs, str(image), cellPx=2)
+    check("image with a hue range decodes", decodeImage(str(image), salt="k")[0] == phrase)
+
+    plain = precomputeColorSpace(" ".join(["abandon"] * 11 + ["about"]), "")
+    before = plain.colorRGB[(0, 0)]
+    refused = not applyHueRange(plain, 0, 0, 300, 30)
+    check(
+        "unreachable hue range is refused and changes nothing",
+        refused and plain.colorRGB[(0, 0)] == before and (0, 0) not in plain.hueRanges
+    )
+
+
 def identityAgreement(phrase, seedType):
     """The encoder and the decoder must name the same standard."""
     _, name, _, _ = identifySeedType(phrase)
@@ -170,6 +230,11 @@ def main():
         print()
         print("======== PROOF OF PHRASE ========")
         proofOfPhrase(min(phrases, key=lambda phrase: len(phrase.split())), workDir)
+
+        print()
+        print("======== HUE RANGES ========")
+        hueParsing()
+        hueRanges(min(phrases, key=lambda phrase: len(phrase.split())), workDir)
 
     print()
 

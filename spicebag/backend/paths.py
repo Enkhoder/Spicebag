@@ -26,6 +26,17 @@ def stripQuotes(raw: str) -> str:
     return raw
 
 
+def tildePath(path: Path) -> str:
+    """A path under the home folder shortened to ~, written the way save paths are typed."""
+    path = Path(os.path.abspath(path))
+
+    try:
+        return (Path("~") / path.relative_to(Path.home())).as_posix()
+
+    except ValueError:
+        return str(path)
+
+
 def _validateStem(stem: str) -> str | None:
     if not stem or not stem.strip():
         return "Filename cannot consist of only whitespaces."

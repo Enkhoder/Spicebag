@@ -1,6 +1,9 @@
 ######## LIBRARIES ########
 
-from spicebag.frontend.theme import C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, bannerGradientHex, invertedGradientHex
+from spicebag.frontend.theme import (
+    C_DIM, C_INP, C_IMG, C_WC, C_FAIL, C_WHITE, HOVERED_CELL_ROWS, bannerGradientHex, invertedGradientHex,
+    sweepGradientHex
+)
 from dataclasses import dataclass, field
 from rich.console import Console
 from rich.cells import cell_len
@@ -25,6 +28,9 @@ class TreeNode:
     sampleSpace: typing.Any = None
     sampleMasked: bool = False
     sampleClickable: bool = False
+    sampleHover: tuple[int, int] | None = None
+    sampleSelected: tuple[int, int] | None = None
+    sampleSelectPhase: int = 0
     words: list[str] = field(default_factory=list)
     cols: int = 0
     rows: int = 0
@@ -92,8 +98,10 @@ def _emitWrapped(
         out.append(row)
 
 
-def _appendSampleRow(rowText: Text, cs, cellR: int, masked: bool) -> None:
-    """Append one block-row (6 cells per column) to an existing prefixed row."""
+def _appendSampleRow(rowText: Text, cs, cellR: int, masked: bool, cellLine: int, hover, selected, phase: int) -> None:
+    """Append one terminal row (6 cells per column) of a block-row to an existing prefixed row. The hovered cell
+    shrinks to a rounded 4-wide block, built from half blocks on its top and bottom rows. The selected cell takes
+    the same shape over a moving brand gradient background."""
     if masked:
         totalCols = cs.cols * 6
         for x in range(totalCols):
@@ -102,7 +110,16 @@ def _appendSampleRow(rowText: Text, cs, cellR: int, masked: bool) -> None:
     else:
         for c in range(cs.cols):
             r, g, b = cs.colorRGB[(cellR, c)]
-            rowText.append("█" * 6, style=f"#{r:02X}{g:02X}{b:02X}")
+            color = f"#{r:02X}{g:02X}{b:02X}"
+            if selected == (cellR, c):
+                shape = HOVERED_CELL_ROWS[cellLine]
+                for x, char in enumerate(shape):
+                    rowText.append(char, style=f"{color} on {sweepGradientHex(x, phase, len(shape))}")
+
+                continue
+
+            block = HOVERED_CELL_ROWS[cellLine] if hover == (cellR, c) else "█" * 6
+            rowText.append(block, style=color)
 
 
 def _renderChildren(
@@ -180,7 +197,16 @@ def _renderChildren(
                     conn = [("│   ", C_DIM)]
 
                 rowText = _mkText(prefix + conn)
-                _appendSampleRow(rowText, cs, k // 3, child.sampleMasked)
+                _appendSampleRow(
+                    rowText,
+                    cs,
+                    k // 3,
+                    child.sampleMasked,
+                    k % 3,
+                    child.sampleHover,
+                    child.sampleSelected,
+                    child.sampleSelectPhase
+                )
                 out.append(rowText)
 
             if not isLast:
