@@ -6,7 +6,7 @@ from spicebag.frontend.theme import (
 )
 from spicebag.backend.generator import identifySeedType, bulkEncodeMnemonic, encodeMnemonic, InvalidSeedWordsError
 from spicebag.backend.paths import parseSavePath, tildePath
-from spicebag.backend.colors import normalizeSalt
+from spicebag.backend.colors import normalizePassphrase
 from rich.style import Style
 from rich.text import Text
 from textual import work
@@ -28,13 +28,13 @@ class EncodeHandlerMixin:
     if typing.TYPE_CHECKING:
         _encodeCount: int
         _wordCount: int
-        _encodeSalt: str
+        _encodePassphrase: str
         _encodePhrase: str
         _encodeSeedType: str
         _encodeCellPx: int
         _encodeSavePath: str
         _encodeFileStem: str
-        _shownSaltWarning: bool
+        _shownPassphraseWarning: bool
         _processing: bool
         _cancelFlag: bool
         _encodingNode: typing.Any
@@ -134,13 +134,13 @@ class EncodeHandlerMixin:
         self._wordCount = wordCount
         self._maskActiveInvalidNode()
         self._addDashbar(C_INP)
-        self._setState(AppState.ENCODE_SALT)
-        self._addStep(self._promptMarkup(AppState.ENCODE_SALT))
+        self._setState(AppState.ENCODE_PASSPHRASE)
+        self._addStep(self._promptMarkup(AppState.ENCODE_PASSPHRASE))
 
 
-    def _handleSaltConfirm(self, rawValue: str) -> None:
-        if normalizeSalt(rawValue) != normalizeSalt(self._encodeSalt):
-            self._addNote(f"[bold {C_FAIL}]Salt does not match.[/]")
+    def _handlePassphraseConfirm(self, rawValue: str) -> None:
+        if normalizePassphrase(rawValue) != normalizePassphrase(self._encodePassphrase):
+            self._addNote(f"[bold {C_FAIL}]Passphrase does not match.[/]")
             return
 
         self._addDashbar(C_INP)
@@ -203,15 +203,15 @@ class EncodeHandlerMixin:
         self._colorSpace = None
         self._activeSampleNode = None
         self._precomputePending = True
-        self._precomputeWorker(self._encodePhrase, self._encodeSalt, token)
+        self._precomputeWorker(self._encodePhrase, self._encodePassphrase, token)
 
 
     @work(thread=True, exit_on_error=False)
-    def _precomputeWorker(self, mnemonic: str, salt: str, token: int) -> None:
+    def _precomputeWorker(self, mnemonic: str, passphrase: str, token: int) -> None:
         from spicebag.backend.generator import precomputeColorSpace
 
         try:
-            cs = precomputeColorSpace(mnemonic, salt)
+            cs = precomputeColorSpace(mnemonic, passphrase)
 
         except Exception:
             cs = None
@@ -402,7 +402,7 @@ class EncodeHandlerMixin:
 
             mnemonic = self._encodePhrase
             count = self._encodeCount
-            salt = self._encodeSalt
+            passphrase = self._encodePassphrase
             cellPx = self._encodeCellPx
             timestamp = time.strftime("%Y%m%d_%H%M%S")
 
@@ -453,10 +453,10 @@ class EncodeHandlerMixin:
                     worker = self._runColorSpaceEncodeInThread(finalPath, cellPx)
 
                 elif count == 1:
-                    worker = self._runEncodeInThread(mnemonic, finalPath, cellPx, salt)
+                    worker = self._runEncodeInThread(mnemonic, finalPath, cellPx, passphrase)
 
                 else:
-                    worker = self._runBulkEncodeInThread(mnemonic, finalPath, count, cellPx, salt)
+                    worker = self._runBulkEncodeInThread(mnemonic, finalPath, count, cellPx, passphrase)
 
                 await worker.wait()
 
@@ -469,13 +469,13 @@ class EncodeHandlerMixin:
                 successMsg.append(filename, style=Style(color=C_IMG, link=fileUri))
 
                 body = []
-                if not self._shownSaltWarning:
+                if not self._shownPassphraseWarning:
                     body.append(Text(
-                        "Memorize or store your salt safely, if provided. "
-                        "Loss of salt will result in image decoding failure.",
+                        "Memorize or store your passphrase safely, if provided. "
+                        "Loss of passphrase will result in image decoding failure.",
                         style=C_DIM,
                     ))
-                    self._shownSaltWarning = True
+                    self._shownPassphraseWarning = True
 
                 self._stopLoader()
                 self._addResult(successMsg, C_SUCC, body=body)
@@ -537,11 +537,11 @@ class EncodeHandlerMixin:
 
 
     @work(thread=True, exit_on_error=False)
-    def _runEncodeInThread(self, mnemonic: str, path: str, cellPx: int, salt: str) -> None:
+    def _runEncodeInThread(self, mnemonic: str, path: str, cellPx: int, passphrase: str) -> None:
         progressCb, cancelCheck = self._workerHooks()
 
         try:
-            encodeMnemonic(mnemonic, path, cellPx=cellPx, salt=salt, cancelCheck=cancelCheck, progressCallback=progressCb)
+            encodeMnemonic(mnemonic, path, cellPx=cellPx, passphrase=passphrase, cancelCheck=cancelCheck, progressCallback=progressCb)
 
         except InterruptedError:
             pass
@@ -561,11 +561,19 @@ class EncodeHandlerMixin:
 
 
     @work(thread=True, exit_on_error=False)
-    def _runBulkEncodeInThread(self, mnemonic: str, path: str, count: int, cellPx: int, salt: str) -> None:
+    def _runBulkEncodeInThread(self, mnemonic: str, path: str, count: int, cellPx: int, passphrase: str) -> None:
         progressCb, cancelCheck = self._workerHooks()
 
         try:
-            bulkEncodeMnemonic(mnemonic, path, count, cellPx=cellPx, salt=salt, cancelCheck=cancelCheck, progressCallback=progressCb)
+            bulkEncodeMnemonic(
+                mnemonic,
+                path,
+                count,
+                cellPx=cellPx,
+                passphrase=passphrase,
+                cancelCheck=cancelCheck,
+                progressCallback=progressCb
+            )
 
         except InterruptedError:
             pass
@@ -573,7 +581,7 @@ class EncodeHandlerMixin:
 
     def _resetEncodeState(self) -> None:
         self._wordCount = 0
-        self._encodeSalt = ""
+        self._encodePassphrase = ""
         self._encodePhrase = ""
         self._encodeSeedType = ""
         self._encodeCount = 1

@@ -179,7 +179,7 @@ def cleanSvg(app: App, svg: str, bgHex: str) -> str:
 
 async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     """Any decoded seed grid or invalid-word note on screen is captured fully masked, whatever its reveal or
-    hover state, and secret input is blanked for the capture."""
+    hover state, and typed secret input is blanked for the capture, shown or hidden, its bullet left as it was."""
     if os.path.exists(path + ".svg"):
         if hasattr(screen, "_triggerInputError"):
             screen._triggerInputError()
@@ -190,19 +190,22 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
     inp = None
     oldValue = ""
     oldPlaceholder = ""
+    oldCursor = 0
     shouldRestore = False
 
     stateName = getattr(state, "name", "")
 
-    if stateName in ("ENCODE_PHRASE", "ENCODE_SALT", "ENCODE_SALT_CONFIRM", "DECODE_SALT"):
+    if stateName in ("ENCODE_PHRASE", "ENCODE_PASSPHRASE", "ENCODE_PASSPHRASE_CONFIRM", "DECODE_PASSPHRASE"):
         try:
             from spicebag.frontend.widgets.secureInput import SecureInput
             inp = screen.query_one("#cmd-input", SecureInput)
-            oldValue = inp.value
-            oldPlaceholder = inp.placeholder
-            inp.value = ""
-            inp.placeholder = ""
-            shouldRestore = True
+            if inp.value:
+                oldValue = inp.value
+                oldPlaceholder = inp.placeholder
+                oldCursor = inp.cursor_position
+                inp.value = ""
+                inp.placeholder = ""
+                shouldRestore = True
 
         except Exception:
             pass
@@ -243,6 +246,7 @@ async def executePrint(screen: Screen, path: str, inline: bool = False) -> None:
             if shouldRestore and inp:
                 inp.value = oldValue
                 inp.placeholder = oldPlaceholder
+                inp.cursor_position = oldCursor
 
             if maskSample and sampleNode is not None:
                 sampleNode.sampleMasked = False

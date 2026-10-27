@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.backend.colors import saltKeys, cellOrder, encodeWord, computeProof, composeOffset, computeFreeSize
+from spicebag.backend.colors import passphraseKeys, cellOrder, encodeWord, computeProof, composeOffset, computeFreeSize
 from spicebag.backend.defaults import SEED_TYPE_STANDARDS, GRID_SIZES
 from dataclasses import dataclass, field
 from PIL import Image
@@ -95,15 +95,15 @@ def encodeMnemonic(
     mnemonicRaw,
     imgPath,
     cellPx=100,
-    salt="",
+    passphrase="",
     cancelCheck=None,
     progressCallback=None
 ):
     indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
     cols, rows = GRID_SIZES[wordCount]
-    colorTables, proofKey, rngSeed = saltKeys(salt)
+    colorTables, proofKey, rngSeed = passphraseKeys(passphrase)
 
-    if salt and progressCallback:
+    if passphrase and progressCallback:
         progressCallback(0.01)
 
     if cancelCheck and cancelCheck():
@@ -148,12 +148,12 @@ def encodeMnemonic(
         progressCallback(1.0)
 
 
-def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelCheck=None, progressCallback=None):
+def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, passphrase="", cancelCheck=None, progressCallback=None):
     indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
     cols, rows = GRID_SIZES[wordCount]
-    colorTables, proofKey, rngSeed = saltKeys(salt)
+    colorTables, proofKey, rngSeed = passphraseKeys(passphrase)
 
-    if salt and progressCallback:
+    if passphrase and progressCallback:
         progressCallback(1 / (count + 1))
 
     allCoords = cellOrder(cols, rows, rngSeed)
@@ -212,7 +212,7 @@ def bulkEncodeMnemonic(mnemonicRaw, zipPath, count, cellPx=100, salt="", cancelC
             imgByteArr.close()
 
             if progressCallback:
-                if salt:
+                if passphrase:
                     progressCallback((i + 2) / (count + 1))
 
                 else:
@@ -236,10 +236,10 @@ class ColorSpace:
     hueRanges: dict = field(default_factory=dict)
 
 
-def precomputeColorSpace(mnemonicRaw, salt):
+def precomputeColorSpace(mnemonicRaw, passphrase):
     indices, _, wordCount, maxIdx = identifySeedType(mnemonicRaw)
     cols, rows = GRID_SIZES[wordCount]
-    colorTables, proofKey, rngSeed = saltKeys(salt)
+    colorTables, proofKey, rngSeed = passphraseKeys(passphrase)
     allCoords = cellOrder(cols, rows, rngSeed)
     cs = ColorSpace(cols, rows, maxIdx, computeFreeSize(maxIdx), indices, computeProof(proofKey, indices), colorTables)
 
@@ -371,11 +371,11 @@ def rerollCell(cs, r, c):
     return True
 
 
-def cellPalettes(mnemonicRaw, salt, cells=None):
-    """Every color each cell can take for this phrase and salt, sorted ascending, keyed by (row, col) in reading
+def cellPalettes(mnemonicRaw, passphrase, cells=None):
+    """Every color each cell can take for this phrase and passphrase, sorted ascending, keyed by (row, col) in reading
     order, for the given cells or all of them. A cell's palette is its word's block with the proof fixed and the
     free bits left open."""
-    cs = precomputeColorSpace(mnemonicRaw, salt)
+    cs = precomputeColorSpace(mnemonicRaw, passphrase)
     palettes = {}
 
     for (r, c), i in sorted(cs.cellToWord.items()):

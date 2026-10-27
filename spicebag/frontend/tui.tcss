@@ -110,6 +110,11 @@ Rule.input-error {
     transition: color 100ms in_out_cubic, background 100ms in_out_cubic;
 }
 
+#input-prompt.masked {
+    color: #ECD251;
+    text-style: bold;
+}
+
 #input-prompt.hue-accepted {
     color: #5DE073;
     background: #1A301E;

@@ -3,7 +3,7 @@
 from spicebag.frontend.theme import (
     COMMANDS, BANNER_META_PREFIX, AppState, OUTPUT_DIR, IMAGES_DIR, SCREENSHOTS_DIR, DEFAULT_CELL_PX, PROGRESS_BAR_LENGTH,
     C_SUCC, C_FAIL, C_INP, C_IMG, C_WC, C_WHITE, C_DIM, getBannerMeta, metaHoverFrameCount, INPUT_FLASH_WIDGETS,
-    parseHueRange, HOVERED_CELL_ROWS,
+    parseHueRange, HOVERED_CELL_ROWS, MASKED_INPUT_STATES,
     blendHexColors, getMascotBanner, gradientColor, bannerGradientHex, ASCII_ART_BANNER, getNetworkText, getVersion,
     bannerHoverFrameCount, formatElapsed, matchCommand, SCREENSHOT_KEY, EXIT_ESC_WINDOW, LIMITED_TERMINAL_NOTICE
 )
@@ -89,7 +89,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def __init__(self) -> None:
         self._state = AppState.IDLE
         self._wordCount = 0
-        self._encodeSalt = ""
+        self._encodePassphrase = ""
         self._encodePhrase = ""
         self._encodeSeedType = ""
         self._encodeCount = 1
@@ -97,7 +97,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodeSavePath = ""
         self._encodeFileStem = ""
         self._decodePath = ""
-        self._decodeSalt = ""
+        self._decodePassphrase = ""
         self._decodeWordCount = 0
         self._decodeValidating = False
         self._decodeInProgress = False
@@ -120,7 +120,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._encodingNode: TreeNode | None = None
         self._typeClearNode: TreeNode | None = None
 
-        self._shownSaltWarning = False
+        self._shownPassphraseWarning = False
         self._anyCommandRun = False
         self._inputErrorTimer: asyncio.TimerHandle | None = None
         self._wordCountWarnTimer: asyncio.TimerHandle | None = None
@@ -167,7 +167,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._selectSweepTimer = None
         self._cellNav = False
         self._lastClickOnCell = False
-        self._lastClickOnBar = False
 
         self._welcomeKey: tuple | None = None
         self._welcomeCache: list = []
@@ -454,7 +453,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         self._encodingNode = None
         self._decodePath = ""
-        self._decodeSalt = ""
+        self._decodePassphrase = ""
         self._setState(AppState.IDLE)
 
         try:
@@ -645,7 +644,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         self._cellNav = True
         self._lastClickOnCell = True
-        self._lastClickOnBar = False
         if cell != self._hueCell:
             self._selectSampleCell(cell)
             return
@@ -685,7 +683,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         to normal until one is selected again."""
         self._cellNav = False
         self._lastClickOnCell = False
-        self._lastClickOnBar = True
         if self._hueCell is not None:
             self._hueCell = None
             self._stopHueBlink()
@@ -802,7 +799,6 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._hueCell = None
         self._cellNav = False
         self._lastClickOnCell = False
-        self._lastClickOnBar = False
         self._setSampleSelection(None)
         self._stopHueBlink()
 
@@ -1262,21 +1258,21 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
     def _promptMarkup(self, state: AppState) -> str:
         if state == AppState.ENCODE_COUNT:
             return (f"[{C_WHITE}]How many images to generate? "
-                    f"([bold]ENTER[/] for single-image generation)[/]")
+                    f"([bold]ENTER[/] for one)[/]")
 
         if state == AppState.ENCODE_PHRASE:
             return f"[{C_WHITE}]Seed phrase goes here.[/]"
 
-        if state == AppState.ENCODE_SALT:
-            return (f"[{C_WHITE}]Enter image salt. "
+        if state == AppState.ENCODE_PASSPHRASE:
+            return (f"[{C_WHITE}]Enter image passphrase. "
                     f"(highly recommended, [bold]ENTER[/] for none)[/]")
 
-        if state == AppState.ENCODE_SALT_CONFIRM:
-            return f"[{C_WHITE}]Confirm image salt.[/]"
+        if state == AppState.ENCODE_PASSPHRASE_CONFIRM:
+            return f"[{C_WHITE}]Confirm image passphrase.[/]"
 
         if state == AppState.ENCODE_CELL:
             return (f"[{C_WHITE}]Set cell size in pixels. "
-                    f"([bold]ENTER[/] for default 100×100px)[/]")
+                    f"([bold]ENTER[/] for 100×100px)[/]")
 
         if state == AppState.ENCODE_SAVE_PATH:
             return (f"[{C_WHITE}]Save path goes here. "
@@ -1291,17 +1287,17 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if state == AppState.DECODE_PATH:
             return f"[{C_WHITE}]Enter path to encoded image.[/]"
 
-        if state == AppState.DECODE_SALT:
-            return (f"[{C_WHITE}]Image salt goes here. "
+        if state == AppState.DECODE_PASSPHRASE:
+            return (f"[{C_WHITE}]Image passphrase goes here. "
                     f"([bold]ENTER[/] if none were given)[/]")
 
         if state == AppState.DECODE_CONFIRM:
-            return (f"[{C_WHITE}]Proceed to decode image?")
+            return (f"[{C_WHITE}]Proceed to recover image?")
 
         if state == AppState.BANNER_CONFIRM:
             nextLabel = "mascot" if not self._useMascotBanner else "ASCII"
             return (f"[{C_WHITE}]Switch to {nextLabel} banner? "
-                    f"Terminal contents will be cleared.[/]")
+                    f"Contents will be cleared.[/]")
 
         return ""
 
@@ -1443,15 +1439,15 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
-        if self._state in (AppState.ENCODE_SALT, AppState.ENCODE_SALT_CONFIRM):
+        if self._state in (AppState.ENCODE_PASSPHRASE, AppState.ENCODE_PASSPHRASE_CONFIRM):
             return (
-                f"[{C_DIM}]Salt adds significant entropy to raw images  "
+                f"[{C_DIM}]Passphrase adds significant entropy to raw images  "
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
-        if self._state == AppState.DECODE_SALT:
+        if self._state == AppState.DECODE_PASSPHRASE:
             return (
-                f"[{C_DIM}]Image cannot be decoded if the salt is lost  "
+                f"[{C_DIM}]Image cannot be decoded if the passphrase is lost  "
                 f"[{C_DIM}]·[/]  [{C_FAIL}][bold]ESC[/] to undo[/]"
             )
 
@@ -1479,13 +1475,13 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
             cols, rows = GRID_SIZES.get(self._wordCount, (4, 6))
             imgW = cols * self._encodeCellPx
             imgH = rows * self._encodeCellPx
-            saltStr = "true" if self._encodeSalt else "false"
-            saltColor = C_SUCC if self._encodeSalt else C_FAIL
+            passphraseStr = "true" if self._encodePassphrase else "false"
+            passphraseColor = C_SUCC if self._encodePassphrase else C_FAIL
 
             base = (
                 f"[{C_DIM}]Seed type: [/][{C_IMG}]{self._encodeSeedType}[/]"
                 + f"  [{C_DIM}]·[/]  [{C_DIM}]Seed words: [/][{C_WC}]{self._wordCount}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]Salt: [/][{saltColor}]{saltStr}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Passphrase: [/][{passphraseColor}]{passphraseStr}[/]"
                 + f"  [{C_DIM}]·[/]  [{C_DIM}]Size: [/][{C_INP}]{imgW}×{imgH}[/]"
             )
             if self._processing:
@@ -1495,12 +1491,12 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state == AppState.DECODE_CONFIRM:
             wordCount = self._decodeWordCount
-            saltStr = "true" if self._decodeSalt else "false"
-            saltColor = C_SUCC if self._decodeSalt else C_FAIL
+            passphraseStr = "true" if self._decodePassphrase else "false"
+            passphraseColor = C_SUCC if self._decodePassphrase else C_FAIL
 
             base = (
                 f"[{C_DIM}]Seed words: [/][{C_WC}]{wordCount}[/]"
-                + f"  [{C_DIM}]·[/]  [{C_DIM}]Salt: [/][{saltColor}]{saltStr}[/]"
+                + f"  [{C_DIM}]·[/]  [{C_DIM}]Passphrase: [/][{passphraseColor}]{passphraseStr}[/]"
             )
             if self._processing:
                 return base
@@ -1519,7 +1515,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
         if self._state == AppState.IDLE:
             if self._exitArmTimer is not None:
-                bar.setStatic(f"[{C_FAIL}]Press [bold]ESC[/] again to exit[/]")
+                bar.setStatic(f"[{C_FAIL}][bold]ESC[/] again to exit[/]")
                 return
 
             bar.setInteractive(COMMANDS, self._tabIndex)
@@ -1529,8 +1525,14 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
 
     def cycleCommands(self) -> None:
-        """Cycle through the main commands using TAB."""
+        """Cycle through the main commands using TAB. At a seed phrase or passphrase prompt TAB shows or hides the
+        input instead, leaving its text and cursor untouched."""
         inp: SecureInput = self.query_one("#cmd-input", SecureInput)
+
+        if self._state in MASKED_INPUT_STATES:
+            inp.password = not inp.password
+            self._updateUI()
+            return
 
         if self._state in (AppState.ENCODE_SAVE_PATH, AppState.DECODE_PATH):
             if not inp.value:
@@ -1571,10 +1573,24 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._updateUI()
 
 
+    def _syncInputPrompt(self) -> None:
+        """Hidden input holding text turns the bullet to the input color, one bar per character after the space. The
+        color switches at once, skipping the bullet's CSS transition, so it lands with the bars on the same frame."""
+        inp = self.query_one("#cmd-input", SecureInput)
+        masked = inp.password and bool(inp.value)
+
+        prompt = self.query_one("#input-prompt", Static)
+        if prompt.has_class("masked") != masked:
+            prompt.set_class(masked, "masked", update=False)
+            self.app.stylesheet.update_nodes([prompt], animate=False)
+
+
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle real-time input changes for highlighting."""
         if event.input.id != "cmd-input":
             return
+
+        self._syncInputPrompt()
 
         if self._hueBlinkTimer is not None and event.input.value != self._hueBlinkText:
             self._stopHueBlink()
@@ -1608,6 +1624,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
 
     def _updateUI(self) -> None:
         inp = self.query_one("#cmd-input", SecureInput)
+        self._syncInputPrompt()
 
         if self._processing:
             verb = "decoding" if self._decodeInProgress else "encoding"
@@ -1624,17 +1641,19 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         elif self._state == AppState.DECODE_PATH:
             inp.placeholder = f"{tildePath(IMAGES_DIR)}//..."
 
-        elif self._hueInputActive() and self._hueCell is None and self._lastClickOnBar:
-            inp.placeholder = "Enter desired hue range for any cell, or press [bold]ENTER[/] to generate image"
-
         elif self._hueInputActive() and self._hueCell is None:
-            inp.placeholder = "Enter desired hue range for any cell"
+            inp.placeholder = "Enter desired hue range for any cell, or [bold]ENTER[/] to generate image"
 
         elif self._hueInputActive():
-            inp.placeholder = "Enter desired hue range for any cell, or click here and press [bold]ENTER[/] to generate image"
+            inp.placeholder = "Enter desired hue range for any cell, or click here and [bold]ENTER[/] to generate image"
 
         elif self._state in (AppState.ENCODE_CONFIRM, AppState.DECODE_CONFIRM, AppState.BANNER_CONFIRM):
-            inp.placeholder = "Press [bold]ENTER[/] to confirm"
+            inp.placeholder = "[bold]ENTER[/] to confirm"
+
+        elif self._state in MASKED_INPUT_STATES:
+            action = "show" if inp.password else "hide"
+            secret = "seed phrase" if self._state == AppState.ENCODE_PHRASE else "passphrase"
+            inp.placeholder = f"[bold]TAB[/] to {action} {secret}"
 
         else:
             inp.placeholder = ""
@@ -1652,9 +1671,9 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         self._lastIdentifiedCommand = ""
         self._cellNav = False
         self._lastClickOnCell = False
-        self._lastClickOnBar = False
         self._stopHueBlink()
         self._clearHueError()
+        self.query_one("#cmd-input", SecureInput).password = state in MASKED_INPUT_STATES
         if state == AppState.IDLE:
             self._curRoot = None
             self._curStep = None
@@ -1692,7 +1711,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         if self._state == AppState.ENCODE_COUNT:
             self._addAnswer("Operation aborted.", f"bold {C_FAIL}", connStyle=C_FAIL)
             self._wordCount = 0
-            self._encodeSalt = ""
+            self._encodePassphrase = ""
             self._encodePhrase = ""
             self._encodeCount = 1
             self._encodeCellPx = DEFAULT_CELL_PX
@@ -1706,21 +1725,21 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         else:
             backMap = {
                 AppState.ENCODE_PHRASE: AppState.ENCODE_COUNT,
-                AppState.ENCODE_SALT: AppState.ENCODE_PHRASE,
-                AppState.ENCODE_SALT_CONFIRM: AppState.ENCODE_SALT,
-                AppState.ENCODE_CELL: AppState.ENCODE_SALT,
+                AppState.ENCODE_PASSPHRASE: AppState.ENCODE_PHRASE,
+                AppState.ENCODE_PASSPHRASE_CONFIRM: AppState.ENCODE_PASSPHRASE,
+                AppState.ENCODE_CELL: AppState.ENCODE_PASSPHRASE,
                 AppState.ENCODE_SAVE_PATH: AppState.ENCODE_CELL,
                 AppState.ENCODE_CONFIRM: AppState.ENCODE_SAVE_PATH,
-                AppState.DECODE_SALT: AppState.DECODE_PATH,
-                AppState.DECODE_CONFIRM: AppState.DECODE_SALT,
+                AppState.DECODE_PASSPHRASE: AppState.DECODE_PATH,
+                AppState.DECODE_CONFIRM: AppState.DECODE_PASSPHRASE,
             }
             prev = backMap.get(self._state)
             if prev is None:
                 return
 
-            self._addAnswer("User stepped back.", C_DIM)
+            self._addAnswer("Stepped back.", C_DIM)
 
-            if self._state in (AppState.ENCODE_PHRASE, AppState.ENCODE_SALT):
+            if self._state in (AppState.ENCODE_PHRASE, AppState.ENCODE_PASSPHRASE):
                 self._maskActiveInvalidNode()
 
             if self._state == AppState.ENCODE_CELL:
@@ -1739,8 +1758,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
                 self._encodePhrase = ""
                 self._encodeSeedType = ""
 
-            elif self._state in (AppState.ENCODE_SALT, AppState.ENCODE_SALT_CONFIRM):
-                self._encodeSalt = ""
+            elif self._state in (AppState.ENCODE_PASSPHRASE, AppState.ENCODE_PASSPHRASE_CONFIRM):
+                self._encodePassphrase = ""
 
             elif self._state == AppState.ENCODE_CELL:
                 self._encodeCellPx = DEFAULT_CELL_PX
@@ -1849,14 +1868,14 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         elif self._state == AppState.ENCODE_PHRASE:
             self._handlePhrase(value)
 
-        elif self._state == AppState.ENCODE_SALT:
-            self._encodeSalt = rawValue
+        elif self._state == AppState.ENCODE_PASSPHRASE:
+            self._encodePassphrase = rawValue
             self._addDashbar(C_INP)
-            self._setState(AppState.ENCODE_SALT_CONFIRM)
-            self._addStep(self._promptMarkup(AppState.ENCODE_SALT_CONFIRM))
+            self._setState(AppState.ENCODE_PASSPHRASE_CONFIRM)
+            self._addStep(self._promptMarkup(AppState.ENCODE_PASSPHRASE_CONFIRM))
 
-        elif self._state == AppState.ENCODE_SALT_CONFIRM:
-            self._handleSaltConfirm(rawValue)
+        elif self._state == AppState.ENCODE_PASSPHRASE_CONFIRM:
+            self._handlePassphraseConfirm(rawValue)
 
         elif self._state == AppState.ENCODE_SAVE_PATH:
             self._handleSavePath(rawValue)
@@ -1870,8 +1889,8 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         elif self._state == AppState.DECODE_PATH:
             await self._handleDecodePath(rawValue)
 
-        elif self._state == AppState.DECODE_SALT:
-            self._decodeSalt = rawValue
+        elif self._state == AppState.DECODE_PASSPHRASE:
+            self._decodePassphrase = rawValue
             self._addDashbar(C_INP)
             self._setState(AppState.DECODE_CONFIRM)
             self._addStep(self._promptMarkup(AppState.DECODE_CONFIRM))
@@ -1971,7 +1990,7 @@ class MainScreen(EncodeHandlerMixin, DecodeHandlerMixin, Screen):
         """Empty the history and redraw the banner, for clear and for a banner switch."""
         self._blocks.clear()
         self._typeClearNode = None
-        self._shownSaltWarning = False
+        self._shownPassphraseWarning = False
         self._anyCommandRun = False
         self._setState(AppState.IDLE)
         self._showWelcome()

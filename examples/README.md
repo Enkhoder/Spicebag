@@ -15,9 +15,9 @@ Plain-text dummy mnemonics, one per supported word count.
 
 ## `images/`
 
-Encoded PNGs. **The filename carries the salt**: do not rename these files, or they become undecodable.
+Encoded PNGs. **The filename carries the passphrase**: do not rename these files, or they become undecodable.
 
-| File | Salt |
+| File | Passphrase |
 |------|------|
 | `12-seedless.png`, `20-seedless.png`, `24-seedless.png`, `33-seedless.png` | none |
 | `12-seed-Z3wjBTmDso1eLQ.png` | `Z3wjBTmDso1eLQ` |
@@ -39,7 +39,7 @@ Deliberately invalid images, kept as decoder regression cases:
 
 ## Usage
 
-Run `spicebag --decode`, or start the interface and type `decode`, then give it a path from the table above along with the matching salt.
+Run `spicebag --decode`, or start the interface and type `decode`, then give it a path from the table above along with the matching passphrase.
 
 ```bat
 spicebag --decode

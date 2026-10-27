@@ -30,7 +30,7 @@ FEISTEL_ROUNDS = 10
 
 PROOF_BITS = 3
 
-UNSALTED_PROOF_KEY = b"SpicebagUnsaltedProof"
+UNENCRYPTED_PROOF_KEY = b"SpicebagUnsaltedProof"
 
 
 

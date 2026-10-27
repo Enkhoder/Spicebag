@@ -16,7 +16,7 @@
   <a href="https://www.producthunt.com/products/spicebag?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-spicebag" target="_blank" rel="noopener noreferrer"><img alt="Spicebag - Compress crypto seed phrases into secure visual artifacts. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1246937&amp;theme=light&amp;t=1789065380333"></a>
 </p>
 
-**Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed, and can be optionally encrypted with a user-provided salt.
+**Spicebag** encodes cryptocurrency wallet seed phrases into color-coded PNG images and decodes them back. Each word in the mnemonic maps to a unique RGB color cell, producing a compact grid image that visually represents the seed, and can be optionally encrypted with a user-provided passphrase.
 
 ---
 
@@ -24,8 +24,8 @@
 
 - **Encode** a seed phrase into a single PNG image or **bulk-generate** multiple variants into a ZIP archive.
 - **Decode** a color-coded PNG back into the original seed phrase.
-- **Salt-based encryption**: an optional passphrase processed through **Argon2id** key derivation scatters each word's colors across the whole color space and shuffles the grid, making the image unreadable without the salt.
-- **Proof-of-phrase**: every image carries an HMAC of its own phrase, so a wrong salt or an altered image is rejected instead of decoding to a different valid phrase.
+- **Passphrase encryption**: an optional passphrase processed through **Argon2id** key derivation scatters each word's colors across the whole color space and shuffles the grid, making the image unreadable without the passphrase.
+- **Proof-of-phrase**: every image carries an HMAC of its own phrase, so a wrong passphrase or an altered image is rejected instead of decoding to a different valid phrase.
 - **CLI mode**: `spicebag --encode`, `--decode` and `--palette` run as plain prompts, without the full-screen TUI app.
 - **Multi-standard support**:
 
@@ -42,16 +42,16 @@
 ## How It Works
 
 1. **Word → Index**: Each seed word is looked up in its standard's wordlist.
-2. **Salt Keys**: If a salt is provided, an Argon2id-derived master key is expanded via HKDF into a color key, a grid-shuffle key and a proof key.
-3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a block offset fills the low bits. The offset's top 3 bits carry a slice of the proof-of-phrase, an HMAC of the whole phrase under the proof key, and the rest is random. Without a salt, that value, split into R/G/B channels, is the cell's color. With a salt, a salt-keyed permutation first scatters it across the whole color space.
-4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a salt is used, cell positions are deterministically shuffled.
-5. **Decoding**: reverses all steps: undo the permutation, look up each word by index, and check the proof slices against the rebuilt phrase. A wrong salt fails the proof instead of decoding to a different valid phrase.
+2. **Passphrase Keys**: If a passphrase is provided, an Argon2id-derived master key is expanded via HKDF into a color key, a grid-shuffle key and a proof key.
+3. **Index → RGB**: The word index fills the high bits of a 24-bit value and a block offset fills the low bits. The offset's top 3 bits carry a slice of the proof-of-phrase, an HMAC of the whole phrase under the proof key, and the rest is random. Without a passphrase, that value, split into R/G/B channels, is the cell's color. With a passphrase, a passphrase-keyed permutation first scatters it across the whole color space.
+4. **Grid Layout**: Each color fills a square cell in a grid whose dimensions match the word count (e.g. 3×4 for 12 words, 4×6 for 24 words). When a passphrase is used, cell positions are deterministically shuffled.
+5. **Decoding**: reverses all steps: undo the permutation, look up each word by index, and check the proof slices against the rebuilt phrase. A wrong passphrase fails the proof instead of decoding to a different valid phrase.
 
 ---
 
 ## Manual Decoding
 
-An image encoded without a salt can be decoded by hand, with nothing but a color picker and the wordlist. Manually decoding salted images is impossible.
+An image encoded without a passphrase can be decoded by hand, with nothing but a color picker and the wordlist. Manually decoding encrypted images is impossible.
 
 ### 1. Find the wordlist
 
@@ -98,14 +98,14 @@ The last word carries the phrase's checksum, so a misread cell almost always pro
 
 ## Configuration Space
 
-How many visually distinct images can encode the *same* seed phrase under the *same* salt?
+How many visually distinct images can encode the *same* seed phrase under the *same* passphrase?
 
-Once the salt is fixed, almost everything is deterministic:
+Once the passphrase is fixed, almost everything is deterministic:
 
 | Component | Source | Free? |
 |-----------|--------|-------|
-| Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed, one layout per salt |
-| Color permutation | 10-round Feistel network keyed by the salt | ❌ Fixed |
+| Cell positions | Grid shuffled by `random.Random(permKey[:8])` | ❌ Fixed, one layout per passphrase |
+| Color permutation | 10-round Feistel network keyed by the passphrase | ❌ Fixed |
 | Proof-of-phrase | Top 3 bits of each block offset, from an HMAC of the phrase | ❌ Fixed |
 | **Rest of the block offset** | `secrets.SystemRandom().randrange(blockSize >> 3)` | ✅ **Free** |
 
@@ -120,11 +120,11 @@ blockSize = 1 << (24 - (maxIdx.bit_length() - 1))
 | BIP39, Electrum | 2048 | 2¹³ | 8,192 | 1,024 |
 | SLIP39 | 1024 | 2¹⁴ | 16,384 | 2,048 |
 
-Every offset produces a distinct color: the offset fills the low bits of the 24-bit value, and the salted color permutation is a bijection, so no two offsets collide.
+Every offset produces a distinct color: the offset fills the low bits of the 24-bit value, and the encrypted color permutation is a bijection, so no two offsets collide.
 
 Since each grid holds exactly one cell per word, the total is `(blockSize / 8) ^ wordCount`:
 
-| Phrase | Entropy | Distinct Images per Salt |
+| Phrase | Entropy | Distinct Images per Passphrase |
 |--------|---------|--------------------------|
 | 12-word BIP39 / Electrum | 120 bits | 1.33 × 10³⁶ |
 | 15-word BIP39 | 150 bits | 1.43 × 10⁴⁵ |
@@ -136,9 +136,9 @@ Since each grid holds exactly one cell per word, the total is `(blockSize / 8) ^
 
 Notes:
 
-- **Positions across salts**: the layout dimension only opens up when the salt changes, contributing up to `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single salt it collapses to one.
-- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 1,024 candidates per cell. The reduction is under 0.5%. A hue range typed for a cell narrows its candidates further, by choice, to its word's colors inside that arc: about a sixth of a salted cell's colors for a 60° arc.
-- **No salt**: the grid is left in natural reading order and no color permutation is applied, but the per-word color count is unchanged.
+- **Positions across passphrases**: the layout dimension only opens up when the passphrase changes, contributing up to `wordCount!` arrangements (4.79 × 10⁸ for 12 words, 6.20 × 10²³ for 24). Within a single passphrase it collapses to one.
+- **Interactive preview**: the clickable color-space editor rejects any color matching the cell's current color or an orthogonal neighbor, trimming at most 5 of 1,024 candidates per cell. The reduction is under 0.5%. A hue range typed for a cell narrows its candidates further, by choice, to its word's colors inside that arc: about a sixth of an encrypted cell's colors for a 60° arc.
+- **No passphrase**: the grid is left in natural reading order and no color permutation is applied, but the per-word color count is unchanged.
 
 ---
 
@@ -242,11 +242,11 @@ python -m pipx install spicebag
 python -m pipx ensurepath
 ```
 
-Open a new terminal once afterwards. The PATH change is permanent, so `spicebag` then works in every terminal, including after a restart.
+Open a new terminal once afterwards.
 
 ### Windows executable
 
-Every [GitHub Release](https://github.com/Enkhoder/Spicebag/releases) from 4.1.0 on carries `Spicebag-X.Y.Z-windows.zip`, which needs no Python. Extract it, keep the `Spicebag` folder somewhere permanent, and run `Spicebag.exe` inside it, from a terminal as `.\Spicebag.exe` or `.\Spicebag.exe --encode`, or pinned to the taskbar or Start menu. The exe needs the `_internal` folder beside it, so move the whole folder, never the exe alone; add the folder to your PATH to run `spicebag` from any terminal. It is not code-signed, so Windows SmartScreen may warn the first time it runs. Releases 4.0.0 and 4.0.1 carried a single `spicebag.exe` instead.
+Every [GitHub Release](https://github.com/Enkhoder/Spicebag/releases) from 4.2.0 on carries three zips that need no Python: `Spicebag-X.Y.Z-windows-x64.zip` for most PCs, `Spicebag-X.Y.Z-windows-arm64.zip` for ARM devices such as Snapdragon laptops, and `Spicebag-X.Y.Z-windows-x86.zip` for 32-bit Windows only. Extract it, keep the `Spicebag` folder somewhere permanent, and run `Spicebag.exe` inside it, from a terminal as `.\Spicebag.exe` or `.\Spicebag.exe --encode`, or pinned to the taskbar or Start menu. The exe needs the `_internal` folder beside it, so move the whole folder, never the exe alone; add the folder to your PATH to run `spicebag` from any terminal. It is not code-signed, so Windows SmartScreen may warn the first time it runs.
 
 ### From source
 
@@ -295,11 +295,11 @@ Type a command at the prompt:
 | `clear` | Clear the scrollback |
 | `exit` | Quit |
 
-Pressing <kbd>ESC</kbd> twice within a second at the menu also quits. An <kbd>ESC</kbd> less than half a second after the previous one never counts toward it, so a burst of <kbd>ESC</kbd> that steps back out of a flow or closes the help screen cannot quit by accident.
+Pressing <kbd>ESC</kbd> twice within a second at the menu also quits.
 
-The encode flow prompts in order for image count, phrase, salt, salt confirmation, cell size, and save path. A single-image encode then shows a clickable color-space preview before writing the file.
+The encode flow prompts in order for image count, phrase, passphrase, passphrase confirmation, cell size, and save path. The seed phrase and passphrase are hidden as a line of bars while you type; press <kbd>TAB</kbd> to show or hide them without losing what you typed. A single-image encode then shows a clickable color-space preview before writing the file.
 
-Clicking a cell in the preview selects it, and each further click on the selected cell rerolls its color. To steer a cell toward a hue, click it, then type a hue range in degrees and press <kbd>ENTER</kbd>: two whole numbers from -360 to 360 separated by spaces, such as `20 120`. The range runs upward from the first hue to the second and wraps past 360, so `-20 -50` covers 340 to 310 and `10 -10` covers 10 to 350. The cell rerolls to a color of its word inside the range, with grays, which have no hue, fitting every range. Later clicks on it stay inside it, and the accepted range blinks green in the input bar. With a range already typed, selecting a cell keeps the range for it without recoloring it, and each later click on it rerolls inside the range. After a click, or after <kbd>ENTER</kbd> on a valid range, the arrow keys move the selection between cells, wrapping around the edges. Clicking the input bar drops the selection until you select a cell again. Unsalted cells reach only a narrow arc of hues, so many ranges have no color for them. While the last click was on a cell, <kbd>ENTER</kbd> rerolls the selected cell even on a blank input bar. To write the image, click the input bar, then press <kbd>ENTER</kbd> on it blank.
+Clicking a cell in the preview selects it, and each further click on the selected cell rerolls its color. To steer a cell toward a hue, click it, then type a hue range in degrees and press <kbd>ENTER</kbd>: two whole numbers from -360 to 360 separated by spaces, such as `20 120`. The range runs upward from the first hue to the second and wraps past 360, so `-20 -50` covers 340 to 310 and `10 -10` covers 10 to 350. The cell rerolls to a color of its word inside the range, with grays, which have no hue, fitting every range. Later clicks on it stay inside it, and the accepted range blinks green in the input bar. With a range already typed, selecting a cell keeps the range for it without recoloring it, and each later click on it rerolls inside the range. After a click, or after <kbd>ENTER</kbd> on a valid range, the arrow keys move the selection between cells. Unencrypted cells reach only a narrow arc of hues, so many ranges have no color for them. To write the image, click the input bar, then press <kbd>ENTER</kbd> on it blank.
 
 ### CLI mode
 
@@ -311,13 +311,13 @@ spicebag --decode   # or -d
 spicebag --palette  # or -p
 ```
 
-Encode asks for the image count, seed phrase, salt, salt confirmation, cell size and save path. Decode asks for the image path and salt. Palette asks for the seed phrase, salt and cells. The seed phrase, the salt and its confirmation use native terminal masking, so nothing appears while you type. A rejected answer repeats the prompt with the reason in front of it.
+Encode asks for the image count, seed phrase, passphrase, passphrase confirmation, cell size and save path. Decode asks for the image path and passphrase. Palette asks for the seed phrase, passphrase and cells. The seed phrase, the passphrase and its confirmation use native terminal masking, so nothing appears while you type. A rejected answer repeats the prompt with the reason in front of it.
 
-Encode and decode then ask `Proceed? (y/n)` before doing any work. `y` or `yes` continues. `n`, `no` or three answers that are neither, plain ENTER included, end the run without writing anything. Case is ignored. <kbd>Ctrl</kbd>+<kbd>C</kbd> aborts at any step. Save paths follow the TUI app's rules, with `~` as your home folder, and `spicebag --help` lists them.
+Encode and decode then ask `Proceed? (y/n)` before doing any work. `y` or `yes` continues. <kbd>Ctrl</kbd>+<kbd>C</kbd> aborts at any step. Save paths follow the TUI app's rules, with `~` as your home folder, and `spicebag --help` lists them.
 
-A decoded seed phrase is never printed. Decode reports what it recovered and asks before copying the phrase to the clipboard, so answering `N` checks an image and salt without exposing the phrase. On Windows the copy is kept out of clipboard history and cloud sync. macOS uses `pbcopy` and Linux uses `wl-copy` (Wayland), and neither can opt out of clipboard managers or Universal Clipboard, so clear the clipboard once you are done. Under WSL, the clipboard is mirrored to Windows and the mirror reads the phrase the moment it is offered, using up the one paste before you can make it, so decode and palette skip the copy question and report `Clipboard unavailable for WSL.` instead.
+A decoded seed phrase is never printed. Decode reports what it recovered and asks before copying the phrase to the clipboard, so answering `N` checks an image and passphrase without exposing the phrase. On Windows the copy is kept out of clipboard history and cloud sync. macOS uses `pbcopy` and Linux uses `wl-copy` (Wayland), and neither can opt out of clipboard managers or Universal Clipboard, so clear the clipboard once you are done. Under WSL, the clipboard is mirrored to Windows and the mirror reads the phrase the moment it is offered, using up the one paste before you can make it, so decode and palette skip the copy question and report `Clipboard unavailable for WSL.` instead.
 
-Palette lists every color each chosen cell can take for that phrase and salt, sorted ascending under headers like `Cell [0][2]` (row, then column, counted from 0), and asks before copying the list. Cells are row and column pairs, such as `0 2 3 1` for `[0][2]` and `[3][1]`, and either index can be a range in either direction, so `0-2 1-2` covers rows 0 to 2 in columns 1 and 2. `*` or plain ENTER takes every cell, and a cell picked twice is copied once. The list gives away the seed phrase as surely as the phrase itself, so it is never printed and takes the same clipboard path as decode.
+Palette lists every color each chosen cell can take for that phrase and passphrase, sorted ascending under headers like `Cell [0][2]` (row, then column, counted from 0), and asks before copying the list. Cells are row and column pairs, such as `0 2 3 1` for `[0][2]` and `[3][1]`, and either index can be a range, so `0-2 1-2` covers rows 0 to 2 in columns 1 and 2. `*` or plain ENTER takes every cell. The list gives away the seed phrase as surely as the phrase itself, so it is never printed and takes the same clipboard path as decode.
 
 ### Output location
 
@@ -330,10 +330,11 @@ Images, ZIP archives, screenshots, and the banner preference file are written to
 > [!CAUTION]
 > Spicebag provides **no protection** against malware, keyloggers, screen capture, coercion, or any form of surveillance. Use it only in a secure, private environment.
 
-- **An unsalted image protects nothing.** Anyone who gets hold of it can read the seed phrase back with a color picker and the public wordlist (see [Manual Decoding](#manual-decoding)). Treat it exactly like the phrase written on paper, and use a salt for any image you cannot keep physically secure.
-- **Salt** is processed with **Argon2id** (`time_cost=4`, `memory_cost=256 MiB`), which makes every guess slow but cannot rescue a guessable salt. Use a long, random one.
+- **An unencrypted image protects nothing.** Anyone who gets hold of it can read the seed phrase back with a color picker and the public wordlist (see [Manual Decoding](#manual-decoding)). Treat it exactly like the phrase written on paper, and use a passphrase for any image you cannot keep physically secure.
+- **Passphrase** is processed with **Argon2id** (`time_cost=4`, `memory_cost=256 MiB`), which makes every guess slow but cannot rescue a guessable passphrase. Use a long, random one.
 - All randomness for color offsets uses Python's `secrets` module (CSPRNG).
-- The salt is **not stored** anywhere. Losing it means the image cannot be decoded.
+- The passphrase is the secret Argon2id derives every key from. Argon2id's own salt is the fixed constant `SpicebagDomain`, the same for every image, so a passphrase guess costs one Argon2id run however many images it is tested against. It is unrelated to a wallet's BIP39 passphrase (the "25th word").
+- The passphrase is **not stored** anywhere. Losing it means the image cannot be decoded.
 
 ---
 

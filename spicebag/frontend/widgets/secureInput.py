@@ -33,6 +33,15 @@ class SecureInput(Input):
         self._ghost = ""
 
 
+    @property
+    def _value(self) -> Text:
+        """Hidden input draws one bar per character in place of Textual's password dots."""
+        if self.password:
+            return Text("─" * len(self.value), no_wrap=True, overflow="ignore", end="")
+
+        return super()._value
+
+
     def watch_value(self, value: str) -> None:
         """Synchronously update autocomplete suggestion in the same transaction to prevent flickers."""
         stripped = value.lower().strip()

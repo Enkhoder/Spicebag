@@ -27,7 +27,7 @@ IMAGE_PATH_ERRORS = {
 class DecodeHandlerMixin:
     if typing.TYPE_CHECKING:
         _decodePath: str
-        _decodeSalt: str
+        _decodePassphrase: str
         _decodeWordCount: int
         _decodeInProgress: bool
         _decodeAbortHandled: bool
@@ -80,8 +80,8 @@ class DecodeHandlerMixin:
 
         self._decodePath = fullPath
         self._decodeWordCount = self._readWordCount(fullPath)
-        self._setState(AppState.DECODE_SALT)
-        self._addStep(self._promptMarkup(AppState.DECODE_SALT))
+        self._setState(AppState.DECODE_PASSPHRASE)
+        self._addStep(self._promptMarkup(AppState.DECODE_PASSPHRASE))
 
 
     @staticmethod
@@ -106,11 +106,11 @@ class DecodeHandlerMixin:
 
     def _handleDecodeConfirm(self) -> None:
         self._addDashbar(C_INP)
-        self._runDecode(self._decodeSalt)
+        self._runDecode(self._decodePassphrase)
 
 
     @work
-    async def _runDecode(self, salt: str) -> None:
+    async def _runDecode(self, passphrase: str) -> None:
         self._processing = True
         self._decodeInProgress = True
         self._decodeAbortHandled = False
@@ -121,7 +121,7 @@ class DecodeHandlerMixin:
         self._startLoader("Decoding seed image")
 
         try:
-            worker = self._runDecodeInThread(self._decodePath, salt)
+            worker = self._runDecodeInThread(self._decodePath, passphrase)
             await worker.wait()
 
             if token != self._decodeToken or self._decodeAbortHandled:
@@ -136,8 +136,8 @@ class DecodeHandlerMixin:
                 return
 
             self._stopLoader(warn=True)
-            saltError = "Salt is incorrect." if salt else "Image is salted or predates v4.0.0."
-            self._addResult(Text(saltError, style=f"bold {C_FAIL}"), C_FAIL)
+            passphraseError = "Passphrase is incorrect." if passphrase else "Image is encrypted or predates v4.0.0."
+            self._addResult(Text(passphraseError, style=f"bold {C_FAIL}"), C_FAIL)
 
         finally:
             if token == self._decodeToken and not self._decodeAbortHandled:
@@ -145,14 +145,14 @@ class DecodeHandlerMixin:
                 self._processing = False
                 self._decodeInProgress = False
                 self._decodePath = ""
-                self._decodeSalt = ""
+                self._decodePassphrase = ""
                 self._encodingNode = None
                 self._setState(AppState.IDLE)
 
 
     @work(thread=True, exit_on_error=False)
-    def _runDecodeInThread(self, path: str, salt: str) -> tuple[str, str]:
+    def _runDecodeInThread(self, path: str, passphrase: str) -> tuple[str, str]:
         progressCb, cancelCheck = self._workerHooks()
         return decodeImage(
-            path, salt=salt, progressCallback=progressCb, validate=False, cancelCheck=cancelCheck
+            path, passphrase=passphrase, progressCallback=progressCb, validate=False, cancelCheck=cancelCheck
         )

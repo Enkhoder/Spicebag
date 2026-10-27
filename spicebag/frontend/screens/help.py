@@ -34,7 +34,7 @@ HELP_DEMO_SEED = (
 PROSE = [
     "Spicebag conceals your seed phrase inside colored PNG cell grid. Colors can be interchanged, "
     "scattered, and reassembled, yet they would still be perfectly decodable to raw string, given "
-    "another compatible images of the same seed phrase and salt.",
+    "another compatible images of the same seed phrase and passphrase.",
 ]
 
 MANUAL_DECODE_SINCE = "v3.0.0"
@@ -43,7 +43,7 @@ VERSION_HOVER_TEXT = f" {MANUAL_DECODE_SINCE} "
 
 ENCODE_LINK = "ENCODE"
 
-SAMPLE_INTRO = "Try the unsalted image sample below."
+SAMPLE_INTRO = "Try the unencrypted image sample below."
 
 HOW_THIS_WORKS_ROWS = [
     [
@@ -57,8 +57,8 @@ HOW_THIS_WORKS_ROWS = [
     [
         ("Starting from ", C_DIM),
         (MANUAL_DECODE_SINCE, C_DIM),
-        (", you can decode unsalted images yourself. Example: Word #1 abandon covers #000000-#001FFF, "
-         "word #2 ability covers #002000-#003FFF, and so on. Unsalted sample on ", C_DIM),
+        (", you can decode unencrypted images yourself. Example: Word #1 abandon covers #000000-#001FFF, "
+         "word #2 ability covers #002000-#003FFF, and so on. Unencrypted sample on ", C_DIM),
         (ENCODE_LINK, C_IMG),
         (" works this way. Read in standard horizontal-left-to-right direction. Translate color values to "
          "decimal first if referring from raw hex codes #RRGGBB.", C_DIM),
@@ -104,14 +104,14 @@ HOW_THIS_WORKS_ROWS = [
         ],
     ),
     [
-        ("Salt goes through ", C_DIM),
+        ("Passphrase goes through ", C_DIM),
         ("Argon2id + HKDF + HMAC", C_DIM),
         (". Each word's colors scatter across the whole color space, cells shuffle, and raw hex codes mean "
-         "nothing anymore. Every cell also hides 3 bits of proof, so an incorrect salt gets rejected instead "
+         "nothing anymore. Every cell also hides 3 bits of proof, so an incorrect passphrase gets rejected instead "
          "of being wrongfully decoded as some other phrase.", C_DIM),
     ],
     [
-        ("Result: one phrase, one salt, and ", C_DIM),
+        ("Result: one phrase, one passphrase, and ", C_DIM),
         ("10^36 to 10^109", C_DIM),
         (" possible images. Math: ", C_DIM),
         ("(blockSize / 2^3)^wordCount = (blockSize / 8)^wordCount", C_DIM),
@@ -150,7 +150,7 @@ COMMAND_ROWS = [
 ENCODE_ROWS = [
     ("Image count", [("1-2000", C_INP)]),
     ("Seed phrase", [("Accepted standards: BIP39, Electrum, SLIP39", C_DIM)]),
-    ("Salt",        [("Further masks your image. Optional but recommended, all Unicode allowed, "
+    ("Passphrase",  [("Further masks your image. Optional but recommended, all Unicode allowed, "
                       "no character limit, no rules.", C_DIM)]),
     ("Cell size",   [("1-2000", C_INP)]),
     ("Save path",   SEE_FILE_PATHS),
@@ -307,7 +307,7 @@ def _decodeBlock(words: Sequence[str], revealAll: bool, hoverIdx: int) -> RootNo
                 "downloading them. No sensitive information ever leaves the CLI.", C_DIM)]),
         _spacer(),
         _branch([("Image file path", C_WHITE)], [_branch(SEE_FILE_PATHS)]),
-        _branch([("Salt used to encode the image", C_WHITE)]),
+        _branch([("Passphrase used to encode the image", C_WHITE)]),
         _spacer(),
         _branch([("Decoded seed phrase from the image sample on ", C_DIM), (ENCODE_LINK, C_IMG), (":", C_DIM)],
                 [seedGrid]),
