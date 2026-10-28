@@ -1,8 +1,8 @@
 """End-to-end smoke checks. Run with `python tests/smoke.py` from the repository root.
 
 Exercises the encode/decode round trip for every standard and word count, asserts that
-salted encodes stay non-deterministic, confirms the deliberately invalid fixtures still
-fail, and checks that a wrong salt is rejected rather than decoded. Exits non-zero on any failure.
+encrypted encodes stay non-deterministic, confirms the deliberately invalid fixtures still
+fail, and checks that a wrong passphrase is rejected rather than decoded. Exits non-zero on any failure.
 """
 
 
@@ -13,7 +13,7 @@ from spicebag.backend.generator import (
     encodeMnemonic, bulkEncodeMnemonic, identifySeedType, precomputeColorSpace, applyHueRange, rerollCell,
     inHueRange, renderColorSpaceToFile
 )
-from spicebag.backend.decoder import decodeImage, WrongSaltError
+from spicebag.backend.decoder import decodeImage, WrongPassphraseError
 from spicebag.frontend.theme import parseHueRange
 import tempfile
 import hashlib
@@ -49,7 +49,7 @@ def check(label: str, condition: bool, detail: object = "") -> None:
         failures.append(label)
 
 
-def saltFor(stem):
+def passphraseFor(stem):
     return stem.split("-seed-")[1] if "-seed-" in stem else ""
 
 
@@ -64,7 +64,7 @@ def decodeFixtures():
         stem = image.stem
 
         try:
-            mnemonic, seedType = decodeImage(str(image), salt=saltFor(stem))
+            mnemonic, seedType = decodeImage(str(image), passphrase=passphraseFor(stem))
 
         except Exception as e:
             check(f"{stem} rejected", stem in EXPECTED_FAILURES, str(e)[:48])
@@ -85,27 +85,27 @@ def generatedPhrases():
 
 
 def roundTrip(phrase, seedType, workDir):
-    """Three encodes of the same phrase and salt must differ, and all must decode back."""
+    """Three encodes of the same phrase and passphrase must differ, and all must decode back."""
     wordCount = len(phrase.split())
 
-    for salt in ("", "smokeSalt"):
+    for passphrase in ("", "smokePassphrase"):
         digests = []
 
         for i in range(3):
             target = workDir / f"{wordCount}-{i}.png"
-            encodeMnemonic(phrase, str(target), cellPx=3, salt=salt)
+            encodeMnemonic(phrase, str(target), cellPx=3, passphrase=passphrase)
             digests.append(hashlib.sha256(target.read_bytes()).hexdigest()[:12])
-            recovered, recoveredType = decodeImage(str(target), salt=salt)
+            recovered, recoveredType = decodeImage(str(target), passphrase=passphrase)
 
             if " ".join(recovered.split()) != phrase or recoveredType != seedType:
-                check(f"{wordCount}w salt={salt!r} decodes to itself", False, recoveredType)
+                check(f"{wordCount}w passphrase={passphrase!r} decodes to itself", False, recoveredType)
                 return
 
-        check(f"{wordCount}w salt={salt!r} round trip", True, seedType)
-        check(f"{wordCount}w salt={salt!r} encodes are non-deterministic", len(set(digests)) == 3, digests)
+        check(f"{wordCount}w passphrase={passphrase!r} round trip", True, seedType)
+        check(f"{wordCount}w passphrase={passphrase!r} encodes are non-deterministic", len(set(digests)) == 3, digests)
 
         archive = workDir / f"{wordCount}.zip"
-        bulkEncodeMnemonic(phrase, str(archive), 3, cellPx=3, salt=salt)
+        bulkEncodeMnemonic(phrase, str(archive), 3, cellPx=3, passphrase=passphrase)
         bulkDigests = []
 
         with zipfile.ZipFile(archive) as bundle:
@@ -113,35 +113,36 @@ def roundTrip(phrase, seedType, workDir):
                 extracted = workDir / "bulk.png"
                 extracted.write_bytes(bundle.read(name))
                 bulkDigests.append(hashlib.sha256(bundle.read(name)).hexdigest()[:12])
-                recovered, _ = decodeImage(str(extracted), salt=salt)
+                recovered, _ = decodeImage(str(extracted), passphrase=passphrase)
 
                 if " ".join(recovered.split()) != phrase:
-                    check(f"{wordCount}w salt={salt!r} bulk decodes", False, name)
+                    check(f"{wordCount}w passphrase={passphrase!r} bulk decodes", False, name)
                     return
 
-        check(f"{wordCount}w salt={salt!r} bulk images are unique", len(set(bulkDigests)) == 3)
+        check(f"{wordCount}w passphrase={passphrase!r} bulk images are unique", len(set(bulkDigests)) == 3)
 
 
-def outcome(image, salt):
+def outcome(image, passphrase):
     try:
-        return decodeImage(str(image), salt=salt)[0]
+        return decodeImage(str(image), passphrase=passphrase)[0]
 
-    except WrongSaltError:
+    except WrongPassphraseError:
         return "rejected"
 
 
 def proofOfPhrase(phrase, workDir):
-    """A wrong, missing or superfluous salt is rejected instead of yielding another valid phrase."""
+    """A wrong, missing or superfluous passphrase is rejected instead of yielding another valid phrase."""
     wordCount = len(phrase.split())
-    salted = workDir / "proof-salted.png"
+    encrypted = workDir / "proof-encrypted.png"
     plain = workDir / "proof-plain.png"
-    encodeMnemonic(phrase, str(salted), cellPx=3, salt="smokeSalt")
+    encodeMnemonic(phrase, str(encrypted), cellPx=3, passphrase="smokePassphrase")
     encodeMnemonic(phrase, str(plain), cellPx=3)
 
-    accepted = [salt for salt in ("smokesalt", "smokeSalt ", "k", "m", "x") if outcome(salted, salt) != "rejected"]
-    check(f"{wordCount}w wrong salts are rejected", not accepted, accepted)
-    check(f"{wordCount}w salted image without its salt is rejected", outcome(salted, "") == "rejected")
-    check(f"{wordCount}w unsalted image given a salt is rejected", outcome(plain, "k") == "rejected")
+    wrongPassphrases = ("smokepassphrase", "smokePassphrase ", "k", "m", "x")
+    accepted = [passphrase for passphrase in wrongPassphrases if outcome(encrypted, passphrase) != "rejected"]
+    check(f"{wordCount}w wrong passphrases are rejected", not accepted, accepted)
+    check(f"{wordCount}w encrypted image without its passphrase is rejected", outcome(encrypted, "") == "rejected")
+    check(f"{wordCount}w unencrypted image given a passphrase is rejected", outcome(plain, "k") == "rejected")
 
 
 def hueParsing():
@@ -176,7 +177,7 @@ def hueRanges(phrase, workDir):
     cs = precomputeColorSpace(phrase, "k")
     neighbors = [cs.colorRGB[cell] for cell in ((1, 0), (0, 1))]
     applied = applyHueRange(cs, 0, 0, 0, 60)
-    check("hue range applies to a salted cell", applied and inHueRange(cs.colorRGB[(0, 0)], 0, 60), cs.colorRGB[(0, 0)])
+    check("hue range applies to an encrypted cell", applied and inHueRange(cs.colorRGB[(0, 0)], 0, 60), cs.colorRGB[(0, 0)])
     check("hue range avoids neighbor colors", cs.colorRGB[(0, 0)] not in neighbors)
 
     rerolled = []
@@ -189,7 +190,7 @@ def hueRanges(phrase, workDir):
 
     image = workDir / "hue.png"
     renderColorSpaceToFile(cs, str(image), cellPx=2)
-    check("image with a hue range decodes", decodeImage(str(image), salt="k")[0] == phrase)
+    check("image with a hue range decodes", decodeImage(str(image), passphrase="k")[0] == phrase)
 
     plain = precomputeColorSpace(" ".join(["abandon"] * 11 + ["about"]), "")
     before = plain.colorRGB[(0, 0)]

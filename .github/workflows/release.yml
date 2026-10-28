@@ -50,8 +50,8 @@ jobs:
               ("examples/images/12-seed-Z3wjBTmDso1eLQ.png", "Z3wjBTmDso1eLQ"),
           ]
 
-          for path, salt in cases:
-              mnemonic, standard = decodeImage(path, salt=salt)
+          for path, passphrase in cases:
+              mnemonic, standard = decodeImage(path, passphrase=passphrase)
               print(f"{path}: {standard}, {len(mnemonic.split())} words")
           PY
 

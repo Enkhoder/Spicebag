@@ -352,11 +352,16 @@ def readClipboard() -> str | None:
 
 
 def clearClipboard() -> bool:
+    """Under WSL, WSLg mirrors the Windows clipboard back into Wayland, so only emptying the Windows side
+    through clip.exe sticks."""
     if sys.platform == "win32":
         return _clearWindows()
 
     if sys.platform == "darwin":
         return _runCommand(["pbcopy"]) is not None
+
+    if clipboardBlocker() == "WSL":
+        return _runCommand(["clip.exe"]) is not None
 
     if sys.platform.startswith("linux"):
         return _runCommand(["wl-copy", "--clear"]) is not None

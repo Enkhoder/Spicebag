@@ -31,7 +31,7 @@ class SpicebagApp(App):
 
     def _fatal_error(self) -> None:
         """Textual's version prints the value of every local variable in the traceback, which can include the
-        seed phrase or the salt. This prints the same traceback without them."""
+        seed phrase or the passphrase. This prints the same traceback without them."""
         self.bell()
         traceback = Traceback(show_locals=False, width=None, suppress=[rich])
         self._exit_renderables.append(Segments(self.console.render(traceback, self.console.options)))

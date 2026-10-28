@@ -275,42 +275,55 @@ def _renderChildren(
                 out.append(_mkText(prefix + [("│", child.connStyle)]))
 
         elif child.kind == "invalidnote":
-            notePrefix = prefix + [("│", C_DIM), (" ", None)]
-
-            baseCol = _prefixWidth(notePrefix)
-            rowText = _mkText(notePrefix)
-            lineIdx = len(out)
+            noteFirst = prefix + [("│", C_DIM), (" ", None)]
+            noteCont = prefix + [("│", C_DIM), ("   ", None)]
 
             words = child.words
             style = f"bold {C_FAIL}"
             plural = "words" if len(words) > 1 else "word"
 
             if child.prefixMsg:
-                head = f"{child.prefixMsg}, invalid seed {plural}: "
+                head = f"{child.prefixMsg}, invalid seed {plural}:"
 
             else:
-                head = f"Invalid seed {plural}: "
+                head = f"Invalid seed {plural}:"
 
-            rowText.append(head, style=style)
-            col = baseCol + cell_len(head)
+            units = [(part, -1) for part in head.split()] + list(zip(words, range(len(words))))
 
-            for wi, w in enumerate(words):
-                if wi > 0:
-                    rowText.append(", ", style=style)
-                    col += 2
+            rowText = _mkText(noteFirst)
+            col = _prefixWidth(noteFirst)
+            atLineStart = True
+
+            for text, wi in units:
+                unitWidth = cell_len(text) + (1 if 0 <= wi < len(words) - 1 else 0)
+                if not atLineStart and col + 1 + unitWidth > width:
+                    out.append(rowText)
+                    rowText = _mkText(noteCont)
+                    col = _prefixWidth(noteCont)
+                    atLineStart = True
+
+                if not atLineStart:
+                    rowText.append(" ", style=style)
+                    col += 1
+
+                atLineStart = False
+
+                if wi < 0:
+                    rowText.append(text, style=style)
+                    col += cell_len(text)
+                    continue
 
                 revealed = (not child.screenshotMask) and (wi == child.hoverIdx)
-
-                if revealed:
-                    rowText.append(w, style=style)
-
-                else:
-                    rowText.append("·" * len(w), style=style)
+                rowText.append(text if revealed else "·" * len(text), style=style)
 
                 if child.interactive:
-                    hoverSink.append((lineIdx, col, col + len(w), child, wi))
+                    hoverSink.append((len(out), col, col + len(text), child, wi))
 
-                col += len(w)
+                col += len(text)
+
+                if wi < len(words) - 1:
+                    rowText.append(",", style=style)
+                    col += 1
 
             out.append(rowText)
 

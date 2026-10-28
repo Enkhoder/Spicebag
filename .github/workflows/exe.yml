@@ -14,8 +14,19 @@ defaults:
 
 jobs:
   exe:
-    name: Build and attach the Windows zip
-    runs-on: windows-latest
+    name: Build and attach the Windows ${{ matrix.arch }} zip
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: x86
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
 
     steps:
       - uses: actions/checkout@v7
@@ -25,6 +36,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+          architecture: ${{ matrix.arch }}
 
       - name: Build the executable
         run: |
@@ -45,10 +57,10 @@ jobs:
       - name: Zip the folder
         env:
           TAG: ${{ github.event.release.tag_name }}
-        run: cd dist && python -m zipfile -c "Spicebag-${TAG#v}-windows.zip" Spicebag
+        run: cd dist && python -m zipfile -c "Spicebag-${TAG#v}-windows-${{ matrix.arch }}.zip" Spicebag
 
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" "dist/Spicebag-${TAG#v}-windows.zip" --clobber
+        run: gh release upload "$TAG" "dist/Spicebag-${TAG#v}-windows-${{ matrix.arch }}.zip" --clobber

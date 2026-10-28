@@ -14,11 +14,11 @@ Expect an acknowledgment within a few days. Because this is currently a single-m
 
 Anything that could expose a seed phrase or make one unrecoverable:
 
-- A phrase or salt reaching the scrollback, the status bar, an exported screenshot, a log, a crash trace, or any file other than the intended output image
+- A phrase or passphrase reaching the scrollback, the status bar, an exported screenshot, a log, a crash trace, or any file other than the intended output image
 - Two different phrases encoding to the same image, or an image decoding to the wrong phrase
-- Encodes that are reproducible from the phrase and salt alone, which would let two files be correlated as sharing both
-- Weakening of the salt handling: Argon2id parameters, HKDF domain separation, the color permutation, or the proof-of-phrase
-- A wrong salt, or an altered image, passing the proof-of-phrase
+- Encodes that are reproducible from the phrase and passphrase alone, which would let two files be correlated as sharing both
+- Weakening of the passphrase handling: Argon2id parameters, HKDF domain separation, the color permutation, or the proof-of-phrase
+- A wrong passphrase, or an altered image, passing the proof-of-phrase
 - A crafted PNG causing code execution, or bypassing the chunk and cell-integrity validation
 - Dependency or supply-chain issues affecting the published package
 
@@ -28,9 +28,9 @@ The threat model is stated in the README and enforced by the warning screen at s
 
 - Malware, keyloggers, screen capture, or a compromised operating system. Spicebag offers no protection against a machine that is already owned.
 - Anyone who can see your screen, your camera, or your keyboard
-- Reading an unsalted image by hand. This is **intentional by design**: without a salt, every cell's hex code sits inside its word's chunk of the color space, so anyone with a color picker and the public wordlist can recover the phrase (see [Manual Decoding](README.md#manual-decoding)). Use a salt for any image that needs protecting.
-- Losing the salt. It is never stored anywhere, by design, and an image encoded with a lost salt is unrecoverable.
-- Brute-forcing a weak salt. Argon2id raises the cost but cannot rescue a guessable passphrase. Since 4.0.0 the proof-of-phrase lets anyone holding an image confirm a correct salt guess offline, which is the price of rejecting wrong salts for their owners; every guess still costs one full Argon2id run, so the salt's strength remains the defense.
+- Reading an unencrypted image by hand. This is **intentional by design**: without a passphrase, every cell's hex code sits inside its word's chunk of the color space, so anyone with a color picker and the public wordlist can recover the phrase (see [Manual Decoding](README.md#manual-decoding)). Use a passphrase for any image that needs protecting.
+- Losing the passphrase. It is never stored anywhere, by design, and an image encoded with a lost passphrase is unrecoverable.
+- Brute-forcing a weak passphrase. Argon2id raises the cost but cannot rescue a guessable passphrase. Since 4.0.0 the proof-of-phrase lets anyone holding an image confirm a correct passphrase guess offline, which is the price of rejecting wrong passphrases for their owners; every guess costs one full Argon2id run, but Argon2id's salt is the fixed `SpicebagDomain`, so that one run tests the guess against every Spicebag image at once. The passphrase's strength remains the defense.
 - Clipboard managers and clipboard sharing. On Windows the copy stays out of clipboard history and cloud sync, but `pbcopy` and `wl-copy` cannot opt out of clipboard managers or Universal Clipboard. Under WSL the clipboard is mirrored to Windows and the mirror takes the one-time paste as soon as it is offered, so CLI mode refuses to copy there and reports `Clipboard unavailable for WSL.`
 - Word lengths visible in the masked invalid-word notice. Only words absent from every wordlist are shown that way, so they are typos rather than seed words.
 

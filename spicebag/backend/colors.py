@@ -1,6 +1,6 @@
 ######## LIBRARIES ########
 
-from spicebag.backend.defaults import FEISTEL_ROUNDS, PROOF_BITS, UNSALTED_PROOF_KEY
+from spicebag.backend.defaults import FEISTEL_ROUNDS, PROOF_BITS, UNENCRYPTED_PROOF_KEY
 from argon2.low_level import hash_secret_raw, Type
 import unicodedata
 import hashlib
@@ -11,16 +11,16 @@ import hmac
 
 ######## SEED ENCODER ########
 
-def normalizeSalt(salt: str) -> str:
-    """NFC form, so a salt typed or pasted with composed or decomposed accents is the same salt everywhere."""
-    return unicodedata.normalize("NFC", salt)
+def normalizePassphrase(passphrase: str) -> str:
+    """NFC form, so a passphrase typed or pasted with composed or decomposed accents is the same passphrase everywhere."""
+    return unicodedata.normalize("NFC", passphrase)
 
 
-def deriveMasterKey(salt: str) -> bytes:
-    saltBytes = normalizeSalt(salt).encode("utf-8")
+def deriveMasterKey(passphrase: str) -> bytes:
+    passphraseBytes = normalizePassphrase(passphrase).encode("utf-8")
 
     return hash_secret_raw(
-        secret=saltBytes,
+        secret=passphraseBytes,
         salt=b"SpicebagDomain",
         time_cost=4,
         memory_cost=2**18,
@@ -46,10 +46,10 @@ def hkdfExpand(key: bytes, info: bytes, length: int = 128) -> bytes:
 
 
 def deriveSubkeys(masterKey: bytes):
-    """Expand the Argon2id master key into the three salt-derived secrets the encoding needs: the
+    """Expand the Argon2id master key into the three passphrase-derived secrets the encoding needs: the
     color permutation, the cell shuffle and the proof of phrase. The free half of each block offset
     is deliberately absent: it is the encoding's only free variable and must come from
-    secrets.SystemRandom(), never from the salt."""
+    secrets.SystemRandom(), never from the passphrase."""
     colorTables = deriveColorTables(hkdfExpand(masterKey, b"colorDomain"))
     permKey = hkdfExpand(masterKey, b"permDomain")
     proofKey = hkdfExpand(masterKey, b"proofDomain", 32)
@@ -144,7 +144,7 @@ def computeFreeSize(maxIndex: int) -> int:
 
 def computeProof(proofKey: bytes, wordIndices: list[int]) -> list[int]:
     """One PROOF_BITS chunk per word, cut in order from HMAC-SHA256 over the whole phrase. The proof
-    depends only on the phrase and the key, so every image of a phrase and salt carries the same
+    depends only on the phrase and the key, so every image of a phrase and passphrase carries the same
     chunks, and rerolling a cell's free bits never touches another cell."""
     digest = hmac.digest(proofKey, b"".join(index.to_bytes(2, "big") for index in wordIndices), "sha256")
     bits = int.from_bytes(digest, "big")
@@ -158,20 +158,20 @@ def composeOffset(proofChunk: int, free: int, maxIndex: int) -> int:
 
 
 
-######## SALT SETUP ########
+######## PASSPHRASE SETUP ########
 
-def saltKeys(salt: str) -> tuple[list[list[int]] | None, bytes, int | None]:
-    """The color tables, proof key and cell-shuffle seed a salt derives. Without a salt the colors are not
-    permuted, the cells stay in reading order, and the proof is keyed by the public UNSALTED_PROOF_KEY."""
-    if not salt:
-        return None, UNSALTED_PROOF_KEY, None
+def passphraseKeys(passphrase: str) -> tuple[list[list[int]] | None, bytes, int | None]:
+    """The color tables, proof key and cell-shuffle seed a passphrase derives. Without a passphrase the colors are not
+    permuted, the cells stay in reading order, and the proof is keyed by the public UNENCRYPTED_PROOF_KEY."""
+    if not passphrase:
+        return None, UNENCRYPTED_PROOF_KEY, None
 
-    colorTables, permKey, proofKey = deriveSubkeys(deriveMasterKey(salt))
+    colorTables, permKey, proofKey = deriveSubkeys(deriveMasterKey(passphrase))
     return colorTables, proofKey, int.from_bytes(permKey[:8], "big")
 
 
 def cellOrder(cols: int, rows: int, rngSeed: int | None) -> list[tuple[int, int]]:
-    """Grid cells in word order: reading order, shuffled by the salt's seed when there is one. Encoder and
+    """Grid cells in word order: reading order, shuffled by the passphrase's seed when there is one. Encoder and
     decoder both take their layout from here, so it is the seeded RNG's only consumer."""
     coords = [(r, c) for r in range(rows) for c in range(cols)]
     if rngSeed is not None:

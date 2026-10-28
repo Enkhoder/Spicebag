@@ -10,7 +10,7 @@ from spicebag.frontend.utils.clipboard import pasteOnce, clearClipboard, clipboa
 from spicebag.frontend.utils.terminalColors import STD_OUTPUT_HANDLE, ENABLE_VIRTUAL_TERMINAL_PROCESSING
 from spicebag.backend.paths import parseSavePath, locateImage, tildePath
 from spicebag.backend.defaults import WORD_COUNTS, GRID_SIZES
-from spicebag.backend.colors import normalizeSalt
+from spicebag.backend.colors import normalizePassphrase
 from rich.console import Console
 from rich.control import Control
 from rich.cells import cell_len
@@ -62,12 +62,12 @@ ANSI_ENCODE_GRADIENT = (
     "color(226)",
     "color(220)",
     "color(214)",
-    "color(209)",
     "color(208)",
     "color(202)",
     "color(203)",
     "color(204)",
-    "color(198)"
+    "color(168)",
+    "color(169)"
 )
 
 ANSI_DECODE_GRADIENT = (
@@ -77,9 +77,9 @@ ANSI_DECODE_GRADIENT = (
     "color(39)",
     "color(45)",
     "color(81)",
-    "color(51)",
-    "color(50)",
-    "color(86)"
+    "color(87)",
+    "color(86)",
+    "color(85)"
 )
 
 
@@ -182,17 +182,17 @@ def _prompt(prompt: str, check, masked: bool = False, fill=None):
             return value
 
 
-def _askSalt() -> str:
-    """MAX_ATTEMPTS mismatched confirmations start the salt over, since a masked first entry may be the typo."""
+def _askPassphrase() -> str:
+    """MAX_ATTEMPTS mismatched confirmations start the passphrase over, since a masked first entry may be the typo."""
     while True:
-        salt = _ask("Salt: ", masked=True)
+        passphrase = _ask("Passphrase: ", masked=True)
         error = ""
 
         for _ in range(MAX_ATTEMPTS):
-            if normalizeSalt(_ask("Confirm salt: ", error, True)) == normalizeSalt(salt):
-                return salt
+            if normalizePassphrase(_ask("Confirm passphrase: ", error, True)) == normalizePassphrase(passphrase):
+                return passphrase
 
-            error = "Salt does not match"
+            error = "No match"
 
 
 def _confirm(prompt: str) -> bool:
@@ -225,7 +225,7 @@ def _checkNumber(raw: str, default: int, maximum: int, unit: str) -> tuple[int |
         return default, ""
 
     if not INTEGER_PATTERN.fullmatch(raw):
-        return None, "Integer only"
+        return None, "Int only"
 
     value = int(raw)
     if value < 1:
@@ -249,7 +249,7 @@ def _checkPhrase(raw: str) -> tuple[str | None, str]:
         identifySeedType(phrase)
 
     except InvalidSeedWordsError as e:
-        return None, "Invalid seed words" if len(e.words) > 1 else "Invalid seed word"
+        return None, f"{len(e.words)} invalid words" if len(e.words) > 1 else "Invalid word"
 
     except ValueError:
         return None, "Checksum failed"
@@ -269,7 +269,7 @@ def _checkCells(raw: str, rows: int, cols: int) -> tuple[set[tuple[int, int]] | 
     for token in tokens:
         match = INDEX_PATTERN.fullmatch(token)
         if not match:
-            return None, "Valid integers only"
+            return None, "Valid ints only"
 
         start, end = sorted((int(match[1]), int(match[2] or match[1])))
         spans.append(range(start, end + 1))
@@ -279,10 +279,10 @@ def _checkCells(raw: str, rows: int, cols: int) -> tuple[set[tuple[int, int]] | 
         for n, span in enumerate(spans)
     )
     if outside:
-        return None, "Indices out of bounds" if outside > 1 else "Index out of bounds"
+        return None, "Out of bounds"
 
     if len(spans) % 2:
-        return None, "Last cell column missing"
+        return None, "Last col missing"
 
     return {(r, c) for rowSpan, colSpan in zip(spans[::2], spans[1::2]) for r in rowSpan for c in colSpan}, ""
 
@@ -304,7 +304,7 @@ def _checkSavePath(raw: str) -> tuple[tuple[Path, str] | None, str]:
             return None, "Dir not found"
 
         if "reserved system name" in result:
-            return None, "Reserved name"
+            return None, "Filename reserved"
 
         return None, "Invalid filename"
 
@@ -448,7 +448,7 @@ def _fileState(path: str) -> tuple[int, int] | None:
 def _encodeFlow() -> int:
     count = _prompt("Image count: ", lambda raw: _checkNumber(raw, 1, MAX_IMAGE_COUNT, ""), fill=str)
     phrase = _prompt("Seed phrase: ", _checkPhrase, masked=True)
-    salt = _askSalt()
+    passphrase = _askPassphrase()
     cellPx = _prompt("Cell size: ", lambda raw: _checkNumber(raw, DEFAULT_CELL_PX, MAX_CELL_PX, "px"), fill=str)
 
     timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -470,10 +470,10 @@ def _encodeFlow() -> int:
             os.makedirs(targetDir, exist_ok=True)
 
             if count == 1:
-                encodeMnemonic(phrase, finalPath, cellPx=cellPx, salt=salt, progressCallback=bar.update)
+                encodeMnemonic(phrase, finalPath, cellPx=cellPx, passphrase=passphrase, progressCallback=bar.update)
 
             else:
-                bulkEncodeMnemonic(phrase, finalPath, count, cellPx=cellPx, salt=salt, progressCallback=bar.update)
+                bulkEncodeMnemonic(phrase, finalPath, count, cellPx=cellPx, passphrase=passphrase, progressCallback=bar.update)
 
     except BaseException as exc:
         if _fileState(finalPath) != before:
@@ -497,19 +497,19 @@ def _encodeFlow() -> int:
 
 def _decodeFlow() -> int:
     path = _prompt("Image path: ", _checkImagePath)
-    salt = _ask("Image salt: ", masked=True)
+    passphrase = _ask("Image passphrase: ", masked=True)
 
     _proceed()
 
     try:
         with ProgressBar("Decoding", ANSI_DECODE_GRADIENT) as bar:
-            mnemonic, seedType = decodeImage(path, salt=salt, progressCallback=bar.update, validate=False)
+            mnemonic, seedType = decodeImage(path, passphrase=passphrase, progressCallback=bar.update, validate=False)
 
     except Aborted:
         raise
 
     except Exception:
-        console.print(Text("Salt is incorrect." if salt else "Image is salted or predates v4.0.0.", style=ANSI_FAIL))
+        console.print(Text("Passphrase is incorrect." if passphrase else "Image is encrypted or predates v4.0.0.", style=ANSI_FAIL))
         return 1
 
     typeLabel = f" {seedType}" if seedType else ""
@@ -526,13 +526,13 @@ def _decodeFlow() -> int:
 
 def _paletteFlow() -> int:
     phrase = _prompt("Seed phrase: ", _checkPhrase, masked=True)
-    salt = _ask("Salt: ", masked=True)
+    passphrase = _ask("Passphrase: ", masked=True)
     cols, rows = GRID_SIZES[len(phrase.split())]
     cells = _prompt("Cells: ", lambda raw: _checkCells(raw, rows, cols), fill=lambda _: "*")
     if _clipboardBlocked():
         return 1
 
-    palettes = cellPalettes(phrase, salt, cells)
+    palettes = cellPalettes(phrase, passphrase, cells)
 
     if not _confirm("Copy to clipboard? (y/N): "):
         raise Aborted(0)

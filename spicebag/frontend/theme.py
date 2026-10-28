@@ -20,7 +20,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "4.1.0"
+        return "4.2.0"
 
 
 
@@ -274,15 +274,20 @@ class AppState(Enum):
     IDLE = auto()
     ENCODE_COUNT = auto()
     ENCODE_PHRASE = auto()
-    ENCODE_SALT = auto()
-    ENCODE_SALT_CONFIRM = auto()
+    ENCODE_PASSPHRASE = auto()
+    ENCODE_PASSPHRASE_CONFIRM = auto()
     ENCODE_CELL = auto()
     ENCODE_SAVE_PATH = auto()
     ENCODE_CONFIRM = auto()
     DECODE_PATH = auto()
-    DECODE_SALT = auto()
+    DECODE_PASSPHRASE = auto()
     DECODE_CONFIRM = auto()
     BANNER_CONFIRM = auto()
+
+
+MASKED_INPUT_STATES = frozenset({
+    AppState.ENCODE_PHRASE, AppState.ENCODE_PASSPHRASE, AppState.ENCODE_PASSPHRASE_CONFIRM, AppState.DECODE_PASSPHRASE
+})
 
 
 

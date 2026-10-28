@@ -6,7 +6,7 @@ from spicebag.backend.defaults import (
     FORBIDDEN_CHUNKS,
     GRID_SIZES
 )
-from spicebag.backend.colors import saltKeys, cellOrder, decodeCell, computeProof
+from spicebag.backend.colors import passphraseKeys, cellOrder, decodeCell, computeProof
 from PIL import Image
 import struct
 
@@ -169,9 +169,9 @@ def imageError(path) -> str | None:
 
 ######## IMAGE DECODER ########
 
-class WrongSaltError(ValueError):
-    """The phrase read with this salt does not carry its proof: a wrong salt, a missing salt, a salt given for
-    an unsalted image, an altered image, or an image made before 4.0.0."""
+class WrongPassphraseError(ValueError):
+    """The phrase read with this passphrase does not carry its proof: a wrong passphrase, a missing passphrase, a
+    passphrase given for an unencrypted image, an altered image, or an image made before 4.0.0."""
 
 
 def resolveMnemonic(wordIndices, wordCount):
@@ -209,11 +209,11 @@ def readCells(pixels, coords, cellWidth, cellHeight, maxIdx, colorTables, cancel
     return wordIndices, proofChunks
 
 
-def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancelCheck=None):
-    """A wrong salt still yields in-range indices, and a random phrase passes a 12-word checksum about one time
+def decodeImage(imagePath, passphrase="", progressCallback=None, validate=True, cancelCheck=None):
+    """A wrong passphrase still yields in-range indices, and a random phrase passes a 12-word checksum about one time
     in fifteen. The proof of phrase is what rejects it: every chunk must match the HMAC of the phrase under this
-    salt's key. A salt given for an unsalted image fails the same way, through the same steps, so the decoder has
-    nothing to tell it apart from a wrong salt by. The progress bar only advances for a phrase that proves itself."""
+    passphrase's key. A passphrase given for an unencrypted image fails the same way, through the same steps, so the decoder has
+    nothing to tell it apart from a wrong passphrase by. The progress bar only advances for a phrase that proves itself."""
     if validate:
         validateImage(imagePath)
 
@@ -232,7 +232,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
     cellWidth = width // cols
     cellHeight = height // rows
 
-    colorTables, proofKey, rngSeed = saltKeys(salt)
+    colorTables, proofKey, rngSeed = passphraseKeys(passphrase)
 
     if cancelCheck and cancelCheck():
         raise InterruptedError("Canceled")
@@ -246,7 +246,7 @@ def decodeImage(imagePath, salt="", progressCallback=None, validate=True, cancel
         if progressCallback is not None:
             progressCallback(0.0)
 
-        raise WrongSaltError("Image or salt is incorrect.")
+        raise WrongPassphraseError("Image or passphrase is incorrect.")
 
     mnemonic, seedType = result
 
