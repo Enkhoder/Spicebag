@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   smoke:
-    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}${{ matrix.arch && format(' · {0}', matrix.arch) || '' }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -30,6 +30,11 @@ jobs:
             python: "3.14"
           - os: windows-latest
             python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+            arch: x86
+          - os: windows-11-arm
+            python: "3.12"
           - os: macos-latest
             python: "3.12"
 
@@ -39,6 +44,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.arch }}
 
       - name: Install the package
         run: |
