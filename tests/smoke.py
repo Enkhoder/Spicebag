@@ -146,12 +146,17 @@ def proofOfPhrase(phrase, workDir):
 
 
 def hueParsing():
-    """The hue range grammar: space-separated hues, hyphen only as a minus sign, upward arcs, one error each."""
+    """The hue range grammar: space-separated hues, hyphen as a minus sign or, spaced on both sides, a separator,
+    upward arcs, one error each."""
     cases = {
         "20 120": (20, 100),
         "-20 -50": (340, 330),
         "10 -10": (10, 340),
-        "- 20   -  50": (340, 330),
+        "-20 - 50": (340, 70),
+        "- 20 50": "Hyphen is misplaced.",
+        "60 - 120": (60, 60),
+        "60 -120": (60, 180),
+        "60 - -120": (60, 180),
         "  7   -3  ": (7, 350),
         "20 20": (20, 0),
         "0 360": (0, 360),
@@ -169,6 +174,10 @@ def hueParsing():
         check(f"hue range {text!r}", got == expected, got)
 
     check("hue range typing allows a dangling hyphen", parseHueRange("20 -", final=False) is None)
+    check(
+        "hue range typing asks for a space after the first hue",
+        parseHueRange("60-", final=False) == "Separate hues with [bold]SPACE[/]."
+    )
 
 
 def hueRanges(phrase, workDir):
