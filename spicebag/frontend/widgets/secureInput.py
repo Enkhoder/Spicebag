@@ -119,18 +119,20 @@ class SecureInput(Input):
 
         else:
             if state in (AppState.ENCODE_COUNT, AppState.ENCODE_CELL):
-                cleanText = "".join(c for c in pasteTextRaw if c.isdigit())
+                pasteText = pasteTextRaw.strip()
+                cleanText = ""
+                for char in pasteText:
+                    if not char.isdigit():
+                        break
 
-                if self.cursor_position == 0:
-                    cleanText = cleanText.lstrip("0")
+                    cleanText += char
 
-                hasDirty = any(c for c in pasteTextRaw if not c.isdigit())
-
-                if hasDirty and hasattr(self.screen, "_triggerInputError"):
+                trimmed = cleanText.lstrip("0") if self.cursor_position == 0 else cleanText
+                if (cleanText != pasteText or not trimmed) and hasattr(self.screen, "_triggerInputError"):
                     self.screen._triggerInputError()
 
-                if cleanText:
-                    self.insert_text_at_cursor(cleanText)
+                if trimmed:
+                    self.insert_text_at_cursor(trimmed)
 
             else:
                 if state == AppState.IDLE:
@@ -148,22 +150,53 @@ class SecureInput(Input):
             handler()
 
 
+    @staticmethod
+    def _hyphenThenSpace(value: str, pos: int, char: str) -> bool:
+        """Whether inserting char at pos leaves a hyphen directly followed by a space, which a hue range refuses."""
+        return char == " " and value[pos - 1:pos] == "-" or char == "-" and value[pos:pos + 1] == " "
+
+
     def _pasteHueRange(self, raw: str) -> None:
-        """Paste into a hue range under the typing rules: only digits, hyphens and spaces go in, and text that
-        would make the range invalid is refused whole with its reason."""
-        text = "".join(" " if char.isspace() else char for char in raw)
-        clean = "".join(char for char in text if char in "0123456789- ")
-        if clean != text:
+        """Paste into a hue range under the typing rules, up to the first character typing would refuse, which shows
+        its reason. Whitespace is trimmed to single spaces between hues, and a hyphen between two hues, bare or with
+        spaces on both sides, becomes that space: 60-120 and 60 - 120 go in as 60 120, and 60 - -120 as 60 -120."""
+        pos = self.cursor_position
+        before, after = self.value[:pos], self.value[pos:]
+        text = re.sub(r"\s+", " ", raw)
+        if not before or before.endswith(" "):
+            text = text.lstrip(" ")
+
+        tailMatch = re.search(r"[0-9] *$", before)
+        tail = tailMatch.group() if tailMatch else ""
+        text = re.sub(r"(?<=[0-9])-(?=[0-9])", " ", tail + text)
+        text = re.sub(r"(?<=[0-9])( +)- +(?=-?[0-9])", r"\1", text)[len(tail):]
+
+        accepted = ""
+        refused = False
+        error = None
+        for char in text:
+            typed = before + accepted
+            if char not in "0123456789- " or self._hyphenThenSpace(typed + after, len(typed), char):
+                refused = True
+                break
+
+            error = parseHueRange(typed + char + after, final=False)
+            if error is not None:
+                break
+
+            accepted += char
+
+        if not after or after.startswith(" "):
+            accepted = accepted.rstrip(" ")
+
+        if accepted:
+            self.insert_text_at_cursor(accepted)
+
+        if refused:
             self.screen._triggerInputError()
 
-        pos = self.cursor_position
-        error = parseHueRange(self.value[:pos] + clean + self.value[pos:], final=False)
-        if error is not None:
+        elif error is not None:
             self.screen._showHueError(error)
-            return
-
-        if clean:
-            self.insert_text_at_cursor(clean)
 
 
     def on_key(self, event: events.Key) -> None:
@@ -247,7 +280,8 @@ class SecureInput(Input):
                 return
 
             if event.is_printable and event.character:
-                if event.character not in "0123456789- ":
+                pos = self.cursor_position
+                if event.character not in "0123456789- " or self._hyphenThenSpace(self.value, pos, event.character):
                     self.screen._triggerInputError()
                     event.stop()
                     event.prevent_default()
@@ -259,7 +293,6 @@ class SecureInput(Input):
                     event.prevent_default()
                     return
 
-                pos = self.cursor_position
                 error = parseHueRange(self.value[:pos] + event.character + self.value[pos:], final=False)
                 if error is not None:
                     self.screen._showHueError(error)

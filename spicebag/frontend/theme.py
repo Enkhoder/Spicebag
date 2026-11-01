@@ -7,6 +7,7 @@ from rich.table import Table
 from enum import Enum, auto
 from rich.text import Text
 from pathlib import Path
+import re
 
 
 
@@ -20,7 +21,7 @@ def getVersion() -> str:
         return version("spicebag")
 
     except PackageNotFoundError:
-        return "4.2.0"
+        return "4.2.1"
 
 
 
@@ -303,13 +304,17 @@ def matchCommand(typed: str) -> str | None:
 
 
 def parseHueRange(text: str, final: bool) -> tuple[int, int] | str | None:
-    """Read two whole hues separated by spaces, each optionally signed by one hyphen that may stand apart from its
-    digits, into the arc (start, span) running upward from the first hue to the second. Returns an error message
-    instead when the text is invalid. While typing (final False) a dangling hyphen or a missing hue is not an error
-    yet, and valid text returns None. Any character other than a digit or a hyphen separates like a space."""
+    """Read two whole hues separated by spaces, each optionally signed by one hyphen directly before its digits, into
+    the arc (start, span) running upward from the first hue to the second. A hyphen with spaces on both sides between
+    two hues is a separator, so 60 - 120 reads as 60 120. Returns an error message instead when the text is invalid.
+    While typing (final False) a dangling hyphen or a missing hue is not an error yet, and valid text returns None.
+    Any character other than a digit or a hyphen separates like a space."""
+    text = re.sub(r"(?<=[0-9])[^0-9-]+-[^0-9-]+(?=-?[0-9])", " ", text)
+
     hues: list[int] = []
     signs = 0
-    misplaced = False
+    misplaced = re.search(r"-[^0-9-]", text) is not None
+    hyphenAfterDigit = False
     tooManyHyphens = False
     afterDigit = False
     i = 0
@@ -324,6 +329,7 @@ def parseHueRange(text: str, final: bool) -> tuple[int, int] | str | None:
         if char == "-":
             if afterDigit:
                 misplaced = True
+                hyphenAfterDigit = True
 
             else:
                 signs += 1
@@ -347,6 +353,9 @@ def parseHueRange(text: str, final: bool) -> tuple[int, int] | str | None:
 
     if tooManyHyphens:
         return "Too many hyphens."
+
+    if hyphenAfterDigit and len(hues) == 1:
+        return "Separate hues with [bold]SPACE[/]."
 
     if misplaced:
         return "Hyphen is misplaced."
